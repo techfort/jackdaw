@@ -50,8 +50,11 @@ export const useStore = create<DAWState>((set, get) => {
     canUndo: false,
     canRedo: false,
     commentDraft: null,
+    currentSongId: null,
+    currentSongName: 'Untitled Song',
     currentProjectId: null,
-    currentProjectName: 'Untitled Project',
+    currentProjectName: '',
+    currentUserRole: null,
     isSyncing: false,
     remotePresences: [],
     markers: { 1: null, 2: null },
@@ -98,7 +101,7 @@ export const useStore = create<DAWState>((set, get) => {
       set({ currentTime: Math.max(0, maxTime) });
     },
 
-    loadProject: (projectState) => {
+    loadSong: (projectState) => {
       // Migrate old data if necessary
       const tracks = (projectState.tracks || []).map((t: any) => {
         if (!t.clips || !Array.isArray(t.clips)) {
@@ -124,8 +127,11 @@ export const useStore = create<DAWState>((set, get) => {
         ...state,
         ...projectState,
         tracks,
+        currentSongId: projectState.currentSongId !== undefined ? projectState.currentSongId : state.currentSongId,
+        currentSongName: projectState.currentSongName !== undefined ? projectState.currentSongName : state.currentSongName,
         currentProjectId: projectState.currentProjectId !== undefined ? projectState.currentProjectId : state.currentProjectId,
         currentProjectName: projectState.currentProjectName !== undefined ? projectState.currentProjectName : state.currentProjectName,
+        currentUserRole: null,
         isPlaying: false,
         currentTime: 0,
         canUndo: false,
@@ -135,12 +141,14 @@ export const useStore = create<DAWState>((set, get) => {
       future.length = 0;
     },
 
-    syncProject: (id) => {
-      set({ isSyncing: true, currentProjectId: id });
-      
-      const unsubscribeProject = storageService.onProjectUpdate(id, (data) => {
+    loadProject: (...args) => get().loadSong(...args),
+
+    syncSong: (projectId, songId) => {
+      set({ isSyncing: true, currentProjectId: projectId, currentSongId: songId });
+
+      const unsubscribeProject = (storageService as any).onSongUpdate(projectId, songId, (data: any) => {
         if (data.updatedAt > (get().lastRemoteUpdate || 0)) {
-          set({ 
+          set({
             lastRemoteUpdate: data.updatedAt,
             tempo: data.tempo,
             comments: data.comments || [],
@@ -156,7 +164,7 @@ export const useStore = create<DAWState>((set, get) => {
         }
       });
 
-      const unsubscribePresence = storageService.onPresenceUpdate(id, (presences) => {
+      const unsubscribePresence = (storageService as any).onPresenceUpdate(projectId, songId, (presences: any[]) => {
         const currentUser = get().currentUser;
         set({ remotePresences: presences.filter(p => p.userId !== currentUser?.id) });
       });
@@ -168,21 +176,23 @@ export const useStore = create<DAWState>((set, get) => {
       };
     },
 
+    syncProject: (id) => get().syncSong(id, id),
+
     updatePresence: (cursorPosition) => {
-      const { currentProjectId, isSyncing } = get();
-      if (!isSyncing || !currentProjectId) return;
-      storageService.updatePresence(currentProjectId, cursorPosition);
+      const { currentProjectId, currentSongId, isSyncing } = get();
+      if (!isSyncing || !currentProjectId || !currentSongId) return;
+      (storageService as any).updatePresence(currentProjectId, currentSongId, cursorPosition);
     },
 
     pushUpdate: async () => {
-      const { isSyncing, currentProjectId, tracks, comments, tempo } = get();
-      if (!isSyncing || !currentProjectId) return;
+      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo } = get();
+      if (!isSyncing || !currentProjectId || !currentSongId) return;
 
       const now = Date.now();
       set({ lastRemoteUpdate: now });
 
       try {
-        await storageService.saveProject(currentProjectId, {
+        await (storageService as any).saveSong(currentProjectId, currentSongId, {
           tempo,
           comments,
           tracks: tracks.map(({ buffer, audioData, ...rest }) => rest), // Keep it light

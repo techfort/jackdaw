@@ -1,28 +1,23 @@
 import { StorageService, AuthService } from './types';
 import { LocalStorageService } from './LocalStorage';
 import { LocalAuthService } from './LocalAuth';
-import { FirebaseStorageService } from './FirebaseStorage';
-import { FirebaseAuthService } from './FirebaseAuth';
-import firebaseConfig from '../../../firebase-applet-config.json';
 
-const isFirebaseConfigured = () => {
-  return firebaseConfig && firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY';
-};
-
-// Check if we should force local mode
-const storageMode = (import.meta as any).env?.VITE_STORAGE_MODE || (isFirebaseConfigured() ? 'firebase' : 'local');
+const storageMode = import.meta.env.VITE_STORAGE_MODE || 'local';
 
 let storageService: StorageService;
 let authService: AuthService;
 
 if (storageMode === 'firebase') {
-  console.log('JackDAW: Using Firebase Storage');
+  // Dynamic import to avoid loading Firebase in local mode
+  const { FirebaseStorageService } = await import('./FirebaseStorage');
+  const { FirebaseAuthService } = await import('./FirebaseAuth');
   storageService = new FirebaseStorageService();
   authService = new FirebaseAuthService();
+  console.log('JackDAW: Using Firebase Storage');
 } else {
-  console.log('JackDAW: Using Local Storage (IndexedDB)');
   storageService = new LocalStorageService();
   authService = new LocalAuthService();
+  console.log('JackDAW: Using Local Storage (IndexedDB)');
 }
 
 export { storageService, authService, storageMode };

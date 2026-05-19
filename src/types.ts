@@ -30,6 +30,9 @@ export interface TrackData {
 
 export type TimelineMode = 'time' | 'beats';
 
+import { Role } from './services/storage/types';
+export type { Role };
+
 export interface DAWState {
   tracks: TrackData[];
   comments: Comment[];
@@ -52,8 +55,11 @@ export interface DAWState {
   canUndo: boolean;
   canRedo: boolean;
   commentDraft: { trackId: string; timestamp: number } | null;
+  currentSongId: string | null;
+  currentSongName: string;
   currentProjectId: string | null;
   currentProjectName: string;
+  currentUserRole: Role | null;
   isSyncing: boolean;
   remotePresences: any[];
   lastRemoteUpdate?: number;
@@ -65,7 +71,9 @@ export interface DAWState {
   setSelectedTrackId: (id: string | null) => void;
   setShowMixer: (show: boolean) => void;
   loadProject: (state: Partial<DAWState>) => void;
+  loadSong: (state: Partial<DAWState>) => void;
   syncProject: (id: string) => () => void;
+  syncSong: (projectId: string, songId: string) => () => void;
   updatePresence: (cursorPosition: number) => void;
   pushUpdate: () => Promise<void>;
   punchIn: (file: File) => Promise<void>;
