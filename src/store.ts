@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import React, { useMemo } from 'react';
 import { DAWState, TrackData, TimelineMode, Comment, Clip } from './types';
-import { db, auth, initAuth, OperationType, handleFirestoreError } from './services/firebaseService';
-import { doc, onSnapshot, updateDoc, setDoc, collection, query, where, deleteDoc } from 'firebase/firestore';
+import { storageService, authService } from './services/storage';
 
 
 interface HistoryState {
@@ -57,7 +56,9 @@ export const useStore = create<DAWState>((set, get) => {
     markers: { 1: null, 2: null },
     selectedTrackId: null,
     showMixer: false,
+    currentUser: null,
 
+    setCurrentUser: (user) => set({ currentUser: user }),
     setSelectedTrackId: (id) => set({ selectedTrackId: id }),
     setShowMixer: (show) => set({ showMixer: show }),
     setFollowPlayhead: (followPlayhead) => set({ followPlayhead }),
@@ -134,17 +135,14 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     syncProject: (id) => {
-      initAuth();
       set({ isSyncing: true, currentProjectId: id });
       
-      const unsubscribeProject = onSnapshot(doc(db, 'projects', id), (snapshot) => {
-        if (!snapshot.exists()) return;
-        const data = snapshot.data();
+      const unsubscribeProject = storageService.onProjectUpdate(id, (data) => {
         if (data.updatedAt > (get().lastRemoteUpdate || 0)) {
           set({ 
             lastRemoteUpdate: data.updatedAt,
             tempo: data.tempo,
-            comments: data.comments,
+            comments: data.comments || [],
             // Only update track metadata, keep buffers
             tracks: get().tracks.map(localTrack => {
               const remoteTrack = data.tracks.find((t: any) => t.id === localTrack.id);
@@ -155,40 +153,24 @@ export const useStore = create<DAWState>((set, get) => {
             })
           });
         }
-      }, (error) => handleFirestoreError(error, OperationType.GET, `projects/${id}`));
+      });
 
-      const unsubscribePresence = onSnapshot(
-        query(collection(db, 'presence'), where('projectId', '==', id)),
-        (snapshot) => {
-          const presences = snapshot.docs
-            .map(d => d.data())
-            .filter(p => p.userId !== auth.currentUser?.uid);
-          set({ remotePresences: presences });
-        }
-      );
+      const unsubscribePresence = storageService.onPresenceUpdate(id, (presences) => {
+        const currentUser = get().currentUser;
+        set({ remotePresences: presences.filter(p => p.userId !== currentUser?.id) });
+      });
 
       return () => {
         unsubscribeProject();
         unsubscribePresence();
         set({ isSyncing: false });
-        if (auth.currentUser) {
-          deleteDoc(doc(db, 'presence', auth.currentUser.uid)).catch(console.error);
-        }
       };
     },
 
     updatePresence: (cursorPosition) => {
       const { currentProjectId, isSyncing } = get();
-      if (!isSyncing || !currentProjectId || !auth.currentUser) return;
-
-      const presenceId = auth.currentUser.uid;
-      setDoc(doc(db, 'presence', presenceId), {
-        userId: presenceId,
-        userName: auth.currentUser.isAnonymous ? `Collaborator ${presenceId.slice(0, 4)}` : (auth.currentUser.displayName || 'Musician'),
-        projectId: currentProjectId,
-        cursorPosition,
-        lastActive: Date.now()
-      }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, `presence/${presenceId}`));
+      if (!isSyncing || !currentProjectId) return;
+      storageService.updatePresence(currentProjectId, cursorPosition);
     },
 
     pushUpdate: async () => {
@@ -199,14 +181,14 @@ export const useStore = create<DAWState>((set, get) => {
       set({ lastRemoteUpdate: now });
 
       try {
-        await updateDoc(doc(db, 'projects', currentProjectId), {
+        await storageService.saveProject(currentProjectId, {
           tempo,
           comments,
           tracks: tracks.map(({ buffer, audioData, ...rest }) => rest), // Keep it light
           updatedAt: now
         });
       } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `projects/${currentProjectId}`);
+        console.error("Failed to push update", err);
       }
     },
 
@@ -401,8 +383,9 @@ export const useStore = create<DAWState>((set, get) => {
 
     addComment: (trackId, timestamp, text) => {
       pushToHistory();
-      const userId = auth.currentUser?.uid || 'anonymous';
-      const userName = auth.currentUser?.isAnonymous ? `Collaborator ${userId.slice(0, 4)}` : (auth.currentUser?.displayName || 'Musician');
+      const user = get().currentUser;
+      const userId = user?.id || 'anonymous';
+      const userName = user?.name || 'Musician';
       
       set((state) => ({
         comments: [...state.comments, {

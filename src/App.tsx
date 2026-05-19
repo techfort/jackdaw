@@ -9,6 +9,7 @@ import { useAudioEngine } from './hooks/useAudioEngine';
 import { useFileImport } from './hooks/useFileImport';
 import { usePresenceSync } from './hooks/usePresenceSync';
 import { Toolbar } from './components/Toolbar';
+import { authService } from './services/storage';
 import { TimelineRuler } from './components/TimelineRuler';
 import { TrackItem } from './components/TrackItem';
 import { Dropzone } from './components/Dropzone';
@@ -169,6 +170,25 @@ export default function App() {
 
   useAudioEngine(); // Initialize audio engine
   usePresenceSync(); // Throttled presence updates
+
+  // Auth Initialization
+  useEffect(() => {
+    const unsubscribe = authService.onAuthStateChanged((user) => {
+      useStore.getState().setCurrentUser(user);
+    });
+
+    // Check for magic link completion if using Firebase
+    if ((authService as any).completeMagicLinkSignIn) {
+      (authService as any).completeMagicLinkSignIn().catch(console.error);
+    } else {
+      // Auto-sign in anonymously in local mode if no user
+      if (!authService.getCurrentUser()) {
+        authService.anonymousSignIn().catch(console.error);
+      }
+    }
+
+    return () => unsubscribe();
+  }, []);
 
   // Handle Sync side-effects
   useEffect(() => {

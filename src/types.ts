@@ -20,7 +20,7 @@ export interface Clip {
 export interface TrackData {
   id: string;
   name: string;
-  buffer: AudioBuffer | null;
+  buffer?: AudioBuffer | null;
   audioData?: ArrayBuffer; // Stored raw data for persistence
   volume: number; // 0 to 1
   isMuted: boolean;
@@ -42,6 +42,10 @@ export interface DAWState {
   followPlayhead: boolean;
   activeTool: 'select' | 'scissors' | 'mute';
   
+  // Auth
+  currentUser: any; // User | null
+  setCurrentUser: (user: any) => void;
+
   // History
   undo: () => void;
   redo: () => void;
