@@ -235,7 +235,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           </button>
           <div className="w-[1px] h-4 bg-white/10 mx-1" />
           <button 
-            onClick={importFiles}
+            onClick={() => importFiles()}
             className="flex items-center gap-1.5 px-2 py-1 hover:bg-white/10 text-white rounded text-[10px] font-black uppercase tracking-widest"
             title="Import Stems (I)"
           >
