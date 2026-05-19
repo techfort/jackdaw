@@ -38,13 +38,9 @@ export const useAudioEngine = () => {
     }
 
     const now = ctx.currentTime;
-    console.debug('[AudioEngine] startPlayback', { startTime, contextState: ctx.state, now, trackCount: tracks.length });
 
     tracks.forEach(track => {
-      if (!track.buffer || track.isMuted) {
-        if (!track.buffer) console.debug('[AudioEngine] skipping track (no buffer):', track.name);
-        return;
-      }
+      if (!track.buffer || track.isMuted) return;
 
       const isSoloedSomewhere = tracks.some(t => t.isSoloed);
       const shouldBeHearable = !isSoloedSomewhere || track.isSoloed;
@@ -70,7 +66,6 @@ export const useAudioEngine = () => {
           const startOffsetInSource = Number(clip.audioStart || 0) + offsetInClip;
           const durationToPlay = Math.max(0, clip.duration - offsetInClip);
 
-          console.debug('[AudioEngine] scheduling source', { clipId: clip.id, whenToStart, startOffsetInSource, durationToPlay });
           if (isFinite(whenToStart) && isFinite(startOffsetInSource) && isFinite(durationToPlay) && durationToPlay > 0) {
             try {
               source.start(whenToStart, startOffsetInSource, durationToPlay);
