@@ -1,0 +1,8 @@
+{
+  "name": "JackDAW",
+  "description": "A collaborative music production hub for remote artists. Features built-in issue tracking, feedback markers, punch-in snippets, and real-time project synchronization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Helpers ---
+
+    function isValidProject(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.name is string && data.name.size() <= 128
+          && data.tempo is number && data.tempo >= 20 && data.tempo <= 300
+          && data.tracks is list && data.tracks.size() <= 64
+          && data.comments is list && data.comments.size() <= 500
+          && data.updatedAt is number;
+    }
+
+    function isValidPresence(data) {
+      return data.userId is string && data.userId.size() <= 128
+          && data.userName is string && data.userName.size() <= 128
+          && data.projectId is string && data.projectId.size() <= 128
+          && data.cursorPosition is number && data.cursorPosition >= 0
+          && data.lastActive is number;
+    }
+
+    // --- Rules ---
+
+    match /projects/{projectId} {
+      allow get: if true; // Public read for projects if you have the ID
+      allow list: if false; // No blanket listing
+      
+      allow create: if isSignedIn() 
+                  && isValidId(projectId) 
+                  && isValidProject(incoming())
+                  && incoming().updatedAt == request.time.toMillis();
+
+      allow update: if isSignedIn()
+                  && isValidProject(incoming())
+                  && incoming().updatedAt == request.time.toMillis()
+                  && incoming().id == existing().id; // ID immutability
+      
+      allow delete: if false; // Protect project deletion for now
+    }
+
+    match /presence/{presenceId} {
+      allow read: if true; // Need to see others' presence
+      
+      allow create: if isSignedIn()
+                  && isValidId(presenceId)
+                  && isValidPresence(incoming())
+                  && incoming().userId == request.auth.uid
+                  && incoming().lastActive == request.time.toMillis();
+
+      allow update: if isSignedIn()
+                  && isValidPresence(incoming())
+                  && incoming().userId == request.auth.uid // Identity integrity
+                  && incoming().lastActive == request.time.toMillis()
+                  && incoming().userId == existing().userId;
+      
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+  }
+}

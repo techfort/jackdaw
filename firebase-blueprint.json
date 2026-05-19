@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "A collaborative DAW project",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "tempo": { "type": "number" },
+        "tracks": { 
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "comments": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "updatedAt": { "type": "number" },
+        "lastModifiedBy": { "type": "string" }
+      },
+      "required": ["id", "name", "tempo", "tracks", "comments", "updatedAt"]
+    },
+    "Presence": {
+      "title": "Presence",
+      "description": "User presence in a project",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "projectId": { "type": "string" },
+        "cursorPosition": { "type": "number" },
+        "lastActive": { "type": "number" }
+      },
+      "required": ["userId", "userName", "projectId", "cursorPosition", "lastActive"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Stores project state"
+    },
+    "/presence/{presenceId}": {
+      "schema": "Presence",
+      "description": "Stores user presence and playback position"
+    }
+  }
+}
