@@ -18,7 +18,7 @@ import { useFileImport } from '../hooks/useFileImport';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ProjectMenu } from './ProjectMenu';
 import { AnimatePresence } from 'motion/react';
-import { storageService } from '../services/storageService';
+import { storageService } from '../services/storage';
 
 interface ToolbarProps {
   onToggleCollaboration?: () => void;
@@ -79,7 +79,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const tracks = useStore(state => state.tracks);
   const comments = useStore(state => state.comments);
   const currentProjectId = useStore(state => state.currentProjectId);
-  const currentProjectName = useStore(state => state.currentProjectName);
+  const currentSongId = useStore(state => state.currentSongId);
+  const currentSongName = useStore(state => state.currentSongName);
   const undo = useStore(state => state.undo);
   const redo = useStore(state => state.redo);
   const canUndo = useStore(state => state.canUndo);
@@ -121,32 +122,32 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   };
 
   const handleQuickSave = useCallback(async () => {
-    if (!currentProjectId) {
+    if (!currentSongId) {
       setShowProjects(true);
       return;
     }
 
     setIsSaving(true);
-    const projectData = {
-      id: currentProjectId,
-      name: currentProjectName,
-      tempo,
-      comments,
-      tracks: tracks.map(({ buffer, audioData, ...rest }) => ({
-        ...rest,
-        clips: (rest.clips || []).map(c => ({ ...c }))
-      })),
-      updatedAt: Date.now()
-    };
+    const projectId = currentProjectId || 'local';
 
     try {
-      await storageService.saveProject(projectData as any);
+      await storageService.saveSong(projectId, currentSongId, {
+        name: currentSongName,
+        tempo,
+        comments,
+        tracks: tracks.map(({ buffer, audioData, ...rest }) => ({
+          ...rest,
+          clips: (rest.clips || []).map(c => ({ ...c }))
+        })) as any,
+        updatedAt: Date.now(),
+        projectId
+      } as any);
     } catch (e) {
       console.error(e);
     } finally {
       setIsSaving(false);
     }
-  }, [currentProjectId, currentProjectName, tempo, comments, tracks]);
+  }, [currentProjectId, currentSongId, currentSongName, tempo, comments, tracks]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -227,7 +228,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           </button>
           <button 
             onClick={handleQuickSave}
-            disabled={isSaving || !currentProjectId}
+            disabled={isSaving || !currentSongId}
             className={`p-1.5 rounded transition-all ${isSaving ? 'animate-pulse text-[var(--color-accent)]' : 'hover:bg-white/10 text-[var(--color-text-muted)] disabled:opacity-20'}`}
             title="Save Project (Ctrl+S)"
           >
