@@ -5,20 +5,21 @@ export const useAudioEngine = () => {
   const audioContext = useRef<AudioContext | null>(null);
   const trackNodes = useRef<{ [clipId: string]: AudioBufferSourceNode }>({});
   const gainNodes = useRef<{ [clipId: string]: GainNode }>({});
-  
-  const { 
-    tracks, 
-    isPlaying, 
-    currentTime, 
-    setIsPlaying, 
-    setCurrentTime 
+
+  const {
+    tracks,
+    isPlaying,
+    currentTime,
+    setIsPlaying,
+    setCurrentTime
   } = useStore();
 
-  useEffect(() => {
-    if (!audioContext.current) {
+  const getOrCreateContext = (): AudioContext => {
+    if (!audioContext.current || audioContext.current.state === 'closed') {
       audioContext.current = new AudioContext();
     }
-  }, []);
+    return audioContext.current;
+  };
 
   const stopAll = () => {
     Object.values(trackNodes.current).forEach((node: AudioBufferSourceNode) => {
@@ -30,51 +31,57 @@ export const useAudioEngine = () => {
   };
 
   const startPlayback = async (startTime: number) => {
-    if (!audioContext.current) return;
+    const ctx = getOrCreateContext();
 
     stopAll();
 
-    if (audioContext.current.state === 'suspended') {
-      await audioContext.current.resume();
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch (e) {
+        console.error('AudioContext resume failed:', e);
+        return;
+      }
     }
 
-    const now = audioContext.current.currentTime;
-    
+    const now = ctx.currentTime;
+    console.debug('[AudioEngine] startPlayback', { startTime, contextState: ctx.state, now, trackCount: tracks.length });
+
     tracks.forEach(track => {
       if (!track.buffer || track.isMuted) return;
-      
+
       const isSoloedSomewhere = tracks.some(t => t.isSoloed);
       const shouldBeHearable = !isSoloedSomewhere || track.isSoloed;
 
       (track.clips || []).forEach(clip => {
         if (clip.isMuted || !shouldBeHearable) return;
 
-        const source = audioContext.current!.createBufferSource();
-        source.buffer = track.buffer;
-        
-        const gain = audioContext.current!.createGain();
+        const source = ctx.createBufferSource();
+        source.buffer = track.buffer!;
+
+        const gain = ctx.createGain();
         gain.gain.value = track.volume;
-        
+
         source.connect(gain);
-        gain.connect(audioContext.current!.destination);
-        
-        // Calculate offset and duration
+        gain.connect(ctx.destination);
+
         const clipStart = clip.offset;
         const clipEnd = clip.offset + clip.duration;
-        
+
         if (startTime < clipEnd) {
           const offsetInClip = Math.max(0, startTime - clipStart);
           const whenToStart = now + Math.max(0, clipStart - startTime);
           const startOffsetInSource = Number(clip.audioStart || 0) + offsetInClip;
           const durationToPlay = Math.max(0, clip.duration - offsetInClip);
-          
-          if (isFinite(whenToStart) && isFinite(startOffsetInSource) && isFinite(durationToPlay)) {
+
+          console.debug('[AudioEngine] scheduling source', { clipId: clip.id, whenToStart, startOffsetInSource, durationToPlay });
+          if (isFinite(whenToStart) && isFinite(startOffsetInSource) && isFinite(durationToPlay) && durationToPlay > 0) {
             try {
               source.start(whenToStart, startOffsetInSource, durationToPlay);
               trackNodes.current[clip.id] = source;
               gainNodes.current[clip.id] = gain;
             } catch (e) {
-              console.error("Failed to start playback source:", e, { whenToStart, startOffsetInSource, durationToPlay });
+              console.error('[AudioEngine] source.start failed:', e, { whenToStart, startOffsetInSource, durationToPlay });
             }
           }
         }
@@ -85,18 +92,18 @@ export const useAudioEngine = () => {
   useEffect(() => {
     if (isPlaying) {
       startPlayback(currentTime);
-      
+
       const startTime = Date.now() / 1000 - currentTime;
       let animationFrame: number;
-      
+
       const tick = () => {
         const newTime = Date.now() / 1000 - startTime;
         setCurrentTime(newTime);
         animationFrame = requestAnimationFrame(tick);
       };
-      
+
       animationFrame = requestAnimationFrame(tick);
-      
+
       return () => {
         cancelAnimationFrame(animationFrame);
         stopAll();
