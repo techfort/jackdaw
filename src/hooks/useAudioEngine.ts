@@ -29,13 +29,13 @@ export const useAudioEngine = () => {
     trackNodes.current = {};
   };
 
-  const startPlayback = (startTime: number) => {
+  const startPlayback = async (startTime: number) => {
     if (!audioContext.current) return;
-    
+
     stopAll();
-    
+
     if (audioContext.current.state === 'suspended') {
-      audioContext.current.resume();
+      await audioContext.current.resume();
     }
 
     const now = audioContext.current.currentTime;
