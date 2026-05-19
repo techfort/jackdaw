@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useStore } from '../store';
+import { getSharedAudioContext } from '../lib/sharedAudioContext';
 
 export const useFileImport = () => {
   const addTrack = useStore(state => state.addTrack);
@@ -10,17 +11,14 @@ export const useFileImport = () => {
       return;
     }
 
-    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const arrayBuffer = await file.arrayBuffer();
-    
+
     try {
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0)); // slice to clone if needed
+      const audioBuffer = await getSharedAudioContext().decodeAudioData(arrayBuffer.slice(0));
       addTrack(audioBuffer, file.name, arrayBuffer, offset);
     } catch (e) {
       console.error("Decoding error:", e);
       alert("Failed to decode audio file.");
-    } finally {
-      audioCtx.close();
     }
   }, [addTrack]);
 
