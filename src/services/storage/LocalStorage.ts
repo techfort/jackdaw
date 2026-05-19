@@ -2,8 +2,14 @@ import { openDB, IDBPDatabase } from 'idb';
 import { StorageService, SongData, Presence, Project, Member, Invite, Role } from './types';
 
 const DB_NAME = 'jackdaw-local-db';
+const SONGS_STORE = 'songs';
 const PROJECTS_STORE = 'projects';
-const VERSION = 1;
+const VERSION = 2;
+
+const generateId = () =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).substring(2, 15);
 
 export class LocalStorageService implements StorageService {
   private db: Promise<IDBPDatabase>;
@@ -13,51 +19,69 @@ export class LocalStorageService implements StorageService {
 
   constructor() {
     this.db = openDB(DB_NAME, VERSION, {
-      upgrade(db) {
-        db.createObjectStore(PROJECTS_STORE, { keyPath: 'id' });
+      async upgrade(db, oldVersion, _newVersion, tx) {
+        if (oldVersion < 1) {
+          // Fresh install at v2 — create both stores clean
+          db.createObjectStore(SONGS_STORE, { keyPath: 'id' });
+          db.createObjectStore(PROJECTS_STORE, { keyPath: 'id' });
+          return;
+        }
+
+        if (oldVersion === 1) {
+          // v1 had a single 'projects' store holding both song records
+          // (keyed projectId/songId) and project metadata (keyed plain id).
+          // v2 separates these into 'songs' and 'projects' stores.
+          const songsStore = db.createObjectStore(SONGS_STORE, { keyPath: 'id' });
+          const oldStore = tx.objectStore(PROJECTS_STORE);
+          const all: any[] = await oldStore.getAll();
+
+          // Song records have a '/' in their id (composite key projectId/songId)
+          const songRecords = all.filter(r => typeof r.id === 'string' && r.id.includes('/'));
+          for (const record of songRecords) {
+            await songsStore.put(record);
+            await oldStore.delete(record.id);
+          }
+          // Project metadata records remain in the now-cleaned 'projects' store
+        }
       },
     });
 
     if (typeof window !== 'undefined') {
       this.broadcastChannel = new BroadcastChannel('jackdaw-sync');
       this.broadcastChannel.onmessage = (event) => {
-        const { type, projectId, data } = event.data;
-        if (type === 'project-update' && projectId) {
-          this.listeners.get(projectId)?.forEach(cb => cb(data));
-        } else if (type === 'presence-update' && projectId) {
-          this.presenceListeners.get(projectId)?.forEach(cb => cb(data));
+        const { type, key, data } = event.data;
+        if (type === 'song-update' && key) {
+          this.listeners.get(key)?.forEach(cb => cb(data));
+        } else if (type === 'presence-update' && key) {
+          this.presenceListeners.get(key)?.forEach(cb => cb(data));
         }
       };
     }
   }
 
-  // Song ops — TODO: Phase C (full implementation)
+  // ── Song ops ──────────────────────────────────────────────────────────────
+
   async getSong(projectId: string, songId: string): Promise<SongData | null> {
     const db = await this.db;
     const key = `${projectId}/${songId}`;
-    return db.get(PROJECTS_STORE, key) ?? null;
+    return db.get(SONGS_STORE, key) ?? null;
   }
 
   async saveSong(projectId: string, songId: string, data: Partial<SongData>): Promise<void> {
     const db = await this.db;
     const key = `${projectId}/${songId}`;
-    const existing = await db.get(PROJECTS_STORE, key);
+    const existing = await db.get(SONGS_STORE, key);
     const updated = {
       ...existing,
       ...data,
-      id: songId,
+      id: key,
       projectId,
       updatedAt: Date.now()
     } as SongData;
 
-    await db.put(PROJECTS_STORE, { ...updated, id: key });
+    await db.put(SONGS_STORE, updated);
 
-    this.broadcastChannel?.postMessage({
-      type: 'project-update',
-      projectId: key,
-      data: updated
-    });
-
+    this.broadcastChannel?.postMessage({ type: 'song-update', key, data: updated });
     this.listeners.get(key)?.forEach(cb => cb(updated));
   }
 
@@ -72,8 +96,8 @@ export class LocalStorageService implements StorageService {
 
   async listSongs(projectId: string): Promise<{ id: string; name: string; updatedAt: number }[]> {
     const db = await this.db;
-    const all = await db.getAll(PROJECTS_STORE);
-    return (all as any[])
+    const all: any[] = await db.getAll(SONGS_STORE);
+    return all
       .filter(s => s.projectId === projectId)
       .map(s => ({
         id: typeof s.id === 'string' && s.id.includes('/') ? s.id.split('/')[1] : s.id,
@@ -85,13 +109,13 @@ export class LocalStorageService implements StorageService {
 
   async deleteSong(projectId: string, songId: string): Promise<void> {
     const db = await this.db;
-    const key = `${projectId}/${songId}`;
-    await db.delete(PROJECTS_STORE, key);
+    await db.delete(SONGS_STORE, `${projectId}/${songId}`);
   }
 
-  // Project ops — TODO: Phase C (full implementation)
+  // ── Project ops ───────────────────────────────────────────────────────────
+
   async createProject(name: string): Promise<Project> {
-    const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+    const id = generateId();
     const project: Project = {
       id,
       name,
@@ -100,7 +124,7 @@ export class LocalStorageService implements StorageService {
       updatedAt: Date.now()
     };
     const db = await this.db;
-    await db.put('projects', project);
+    await db.put(PROJECTS_STORE, project);
     return project;
   }
 
@@ -111,9 +135,7 @@ export class LocalStorageService implements StorageService {
 
   async listUserProjects(): Promise<Project[]> {
     const db = await this.db;
-    const all = await db.getAll(PROJECTS_STORE);
-    // Projects have no '/' in id and no projectId field
-    return (all as any[]).filter(r => !String(r.id).includes('/') && !r.projectId) as Project[];
+    return db.getAll(PROJECTS_STORE);
   }
 
   async deleteProject(id: string): Promise<void> {
@@ -122,30 +144,37 @@ export class LocalStorageService implements StorageService {
   }
 
   async updateProject(id: string, data: Partial<Project>): Promise<void> {
-    // TODO: Phase C
+    const db = await this.db;
+    const existing = await db.get(PROJECTS_STORE, id);
+    if (!existing) return;
+    await db.put(PROJECTS_STORE, { ...existing, ...data, updatedAt: Date.now() });
   }
 
-  // Members — TODO: Phase C
-  async getMembers(projectId: string): Promise<Member[]> {
+  // ── Members — not supported locally ──────────────────────────────────────
+
+  async getMembers(_projectId: string): Promise<Member[]> {
     return [];
   }
 
-  // Invites — TODO: Phase C
-  async inviteToProject(projectId: string, email: string, role: Role): Promise<Invite> {
-    throw new Error('TODO: Phase C');
+  // ── Invites — not supported locally ──────────────────────────────────────
+
+  async inviteToProject(_projectId: string, _email: string, _role: Role): Promise<Invite> {
+    throw new Error('Invites are not supported in local mode');
   }
 
-  async listInvites(projectId: string): Promise<Invite[]> {
+  async listInvites(_projectId: string): Promise<Invite[]> {
     return [];
   }
 
-  async acceptInvite(inviteId: string, projectId: string): Promise<void> {
-    // TODO: Phase C
+  async acceptInvite(_inviteId: string, _projectId: string): Promise<void> {
+    throw new Error('Invites are not supported in local mode');
   }
 
-  async revokeInvite(projectId: string, inviteId: string): Promise<void> {
-    // TODO: Phase C
+  async revokeInvite(_projectId: string, _inviteId: string): Promise<void> {
+    throw new Error('Invites are not supported in local mode');
   }
+
+  // ── Presence ──────────────────────────────────────────────────────────────
 
   async updatePresence(projectId: string, songId: string, cursorPosition: number): Promise<void> {
     const user = JSON.parse(localStorage.getItem('jackdaw-user') || '{}');
@@ -161,11 +190,7 @@ export class LocalStorageService implements StorageService {
     };
 
     const key = `${projectId}/${songId}`;
-    this.broadcastChannel?.postMessage({
-      type: 'presence-update',
-      projectId: key,
-      data: [presence]
-    });
+    this.broadcastChannel?.postMessage({ type: 'presence-update', key, data: [presence] });
   }
 
   onPresenceUpdate(projectId: string, songId: string, callback: (presences: Presence[]) => void): () => void {

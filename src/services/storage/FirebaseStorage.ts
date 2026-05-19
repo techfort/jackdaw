@@ -7,13 +7,21 @@ import {
   query,
   where,
   deleteDoc,
-  getDoc
+  getDoc,
+  getDocs
 } from 'firebase/firestore';
+import { sendSignInLinkToEmail } from 'firebase/auth';
 import { db, auth, OperationType, handleFirestoreError } from '../firebaseService';
 import { StorageService, SongData, Presence, Project, Member, Invite, Role } from './types';
 
+const generateId = () =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).substring(2, 15);
+
 export class FirebaseStorageService implements StorageService {
-  // Song ops — TODO: Phase C (full implementation)
+  // ── Song ops ──────────────────────────────────────────────────────────────
+
   async getSong(projectId: string, songId: string): Promise<SongData | null> {
     try {
       const snap = await getDoc(doc(db, 'projects', projectId, 'songs', songId));
@@ -27,28 +35,41 @@ export class FirebaseStorageService implements StorageService {
 
   async saveSong(projectId: string, songId: string, data: Partial<SongData>): Promise<void> {
     try {
-      await updateDoc(doc(db, 'projects', projectId, 'songs', songId), {
+      await setDoc(doc(db, 'projects', projectId, 'songs', songId), {
         ...data,
         updatedAt: Date.now()
-      });
+      }, { merge: true });
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `projects/${projectId}/songs/${songId}`);
+      handleFirestoreError(err, OperationType.WRITE, `projects/${projectId}/songs/${songId}`);
     }
   }
 
   onSongUpdate(projectId: string, songId: string, callback: (data: SongData) => void): () => void {
-    return onSnapshot(doc(db, 'projects', projectId, 'songs', songId), (snapshot) => {
-      if (snapshot.exists()) {
-        callback(snapshot.data() as SongData);
+    return onSnapshot(
+      doc(db, 'projects', projectId, 'songs', songId),
+      (snapshot) => {
+        if (snapshot.exists()) callback(snapshot.data() as SongData);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, `projects/${projectId}/songs/${songId}`);
       }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `projects/${projectId}/songs/${songId}`);
-    });
+    );
   }
 
   async listSongs(projectId: string): Promise<{ id: string; name: string; updatedAt: number }[]> {
-    // TODO: Phase C
-    return [];
+    try {
+      const snap = await getDocs(collection(db, 'projects', projectId, 'songs'));
+      return snap.docs
+        .map(d => ({
+          id: d.id,
+          name: (d.data().name as string) || 'Untitled',
+          updatedAt: (d.data().updatedAt as number) || 0
+        }))
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, `projects/${projectId}/songs`);
+      return [];
+    }
   }
 
   async deleteSong(projectId: string, songId: string): Promise<void> {
@@ -59,55 +80,175 @@ export class FirebaseStorageService implements StorageService {
     }
   }
 
-  // Project ops — TODO: Phase C (full implementation)
+  // ── Project ops ───────────────────────────────────────────────────────────
+
   async createProject(name: string): Promise<Project> {
-    // TODO: Phase C
-    throw new Error('TODO: Phase C');
+    if (!auth.currentUser) throw new Error('Must be signed in to create a project');
+    const id = generateId();
+    const userId = auth.currentUser.uid;
+    const now = Date.now();
+
+    const project: Project = { id, name, ownerId: userId, createdAt: now, updatedAt: now };
+
+    await setDoc(doc(db, 'projects', id), project);
+
+    await setDoc(doc(db, 'projects', id, 'members', userId), {
+      userId,
+      role: 'owner',
+      name: auth.currentUser.displayName || `User ${userId.slice(0, 4)}`,
+      joinedAt: now
+    } as Member);
+
+    await setDoc(doc(db, 'userProjects', userId, 'projects', id), {
+      projectId: id,
+      name,
+      role: 'owner',
+      joinedAt: now
+    });
+
+    return project;
   }
 
   async getProject(id: string): Promise<Project | null> {
-    // TODO: Phase C
-    return null;
+    try {
+      const snap = await getDoc(doc(db, 'projects', id));
+      if (!snap.exists()) return null;
+      return snap.data() as Project;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, `projects/${id}`);
+      return null;
+    }
   }
 
   async listUserProjects(): Promise<Project[]> {
-    // TODO: Phase C
-    return [];
+    if (!auth.currentUser) return [];
+    try {
+      const userId = auth.currentUser.uid;
+      const mirrors = await getDocs(collection(db, 'userProjects', userId, 'projects'));
+      const projects = await Promise.all(
+        mirrors.docs.map(m => this.getProject(m.data().projectId as string))
+      );
+      return projects.filter((p): p is Project => p !== null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, 'userProjects');
+      return [];
+    }
   }
 
   async deleteProject(id: string): Promise<void> {
     try {
       await deleteDoc(doc(db, 'projects', id));
+      if (auth.currentUser) {
+        await deleteDoc(doc(db, 'userProjects', auth.currentUser.uid, 'projects', id));
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `projects/${id}`);
     }
   }
 
   async updateProject(id: string, data: Partial<Project>): Promise<void> {
-    // TODO: Phase C
+    try {
+      await updateDoc(doc(db, 'projects', id), { ...data, updatedAt: Date.now() });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `projects/${id}`);
+    }
   }
 
-  // Members — TODO: Phase C
+  // ── Members ───────────────────────────────────────────────────────────────
+
   async getMembers(projectId: string): Promise<Member[]> {
-    return [];
+    try {
+      const snap = await getDocs(collection(db, 'projects', projectId, 'members'));
+      return snap.docs.map(d => d.data() as Member);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, `projects/${projectId}/members`);
+      return [];
+    }
   }
 
-  // Invites — TODO: Phase C
+  // ── Invites ───────────────────────────────────────────────────────────────
+
   async inviteToProject(projectId: string, email: string, role: Role): Promise<Invite> {
-    throw new Error('TODO: Phase C');
+    if (!auth.currentUser) throw new Error('Must be signed in to invite');
+    const inviteId = generateId();
+    const now = Date.now();
+
+    const invite: Invite = {
+      id: inviteId,
+      email,
+      role,
+      createdBy: auth.currentUser.uid,
+      createdAt: now,
+      expiresAt: now + 7 * 24 * 60 * 60 * 1000, // 7 days
+      status: 'pending'
+    };
+
+    await setDoc(doc(db, 'projects', projectId, 'invites', inviteId), invite);
+
+    const callbackUrl = `${window.location.origin}?invite=${inviteId}&project=${projectId}`;
+    await sendSignInLinkToEmail(auth, email, {
+      url: callbackUrl,
+      handleCodeInApp: true
+    });
+
+    return invite;
   }
 
   async listInvites(projectId: string): Promise<Invite[]> {
-    return [];
+    try {
+      const snap = await getDocs(collection(db, 'projects', projectId, 'invites'));
+      return snap.docs.map(d => d.data() as Invite);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, `projects/${projectId}/invites`);
+      return [];
+    }
   }
 
   async acceptInvite(inviteId: string, projectId: string): Promise<void> {
-    // TODO: Phase C
+    if (!auth.currentUser) throw new Error('Must be signed in to accept invite');
+    const userId = auth.currentUser.uid;
+    const userEmail = auth.currentUser.email;
+
+    const inviteSnap = await getDoc(doc(db, 'projects', projectId, 'invites', inviteId));
+    if (!inviteSnap.exists()) throw new Error('Invite not found');
+    const invite = inviteSnap.data() as Invite;
+
+    if (invite.status !== 'pending') throw new Error('Invite is no longer pending');
+    if (Date.now() > invite.expiresAt) throw new Error('Invite has expired');
+    if (userEmail && invite.email.toLowerCase() !== userEmail.toLowerCase()) {
+      throw new Error('Invite email does not match your account');
+    }
+
+    const now = Date.now();
+
+    await setDoc(doc(db, 'projects', projectId, 'members', userId), {
+      userId,
+      role: invite.role,
+      name: auth.currentUser.displayName || `User ${userId.slice(0, 4)}`,
+      joinedAt: now
+    } as Member);
+
+    const projSnap = await getDoc(doc(db, 'projects', projectId));
+    const projName = projSnap.exists() ? (projSnap.data().name as string) : '';
+    await setDoc(doc(db, 'userProjects', userId, 'projects', projectId), {
+      projectId,
+      name: projName,
+      role: invite.role,
+      joinedAt: now
+    });
+
+    await updateDoc(doc(db, 'projects', projectId, 'invites', inviteId), { status: 'accepted' });
   }
 
   async revokeInvite(projectId: string, inviteId: string): Promise<void> {
-    // TODO: Phase C
+    try {
+      await updateDoc(doc(db, 'projects', projectId, 'invites', inviteId), { status: 'expired' });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `projects/${projectId}/invites/${inviteId}`);
+    }
   }
+
+  // ── Presence ──────────────────────────────────────────────────────────────
 
   async updatePresence(projectId: string, songId: string, cursorPosition: number): Promise<void> {
     if (!auth.currentUser) return;
@@ -120,7 +261,7 @@ export class FirebaseStorageService implements StorageService {
         songId,
         cursorPosition,
         lastActive: Date.now()
-      }, { merge: true });
+      } as Presence, { merge: true });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `presence/${presenceId}`);
     }
@@ -128,10 +269,13 @@ export class FirebaseStorageService implements StorageService {
 
   onPresenceUpdate(projectId: string, songId: string, callback: (presences: Presence[]) => void): () => void {
     return onSnapshot(
-      query(collection(db, 'presence'), where('projectId', '==', projectId), where('songId', '==', songId)),
+      query(
+        collection(db, 'presence'),
+        where('projectId', '==', projectId),
+        where('songId', '==', songId)
+      ),
       (snapshot) => {
-        const presences = snapshot.docs.map(d => d.data() as Presence);
-        callback(presences);
+        callback(snapshot.docs.map(d => d.data() as Presence));
       }
     );
   }

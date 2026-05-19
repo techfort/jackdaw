@@ -1,18 +1,36 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 0. Global Safety Net
+
+    // ── Global safety net ─────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // --- Helpers ---
+    // ── Helpers ───────────────────────────────────────────────────────────
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function isMember(projectId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/projects/$(projectId)/members/$(uid()));
+    }
+
+    function memberRole(projectId) {
+      return get(/databases/$(database)/documents/projects/$(projectId)/members/$(uid())).data.role;
+    }
+
+    function isOwner(projectId) {
+      return isMember(projectId) && memberRole(projectId) == 'owner';
+    }
+
+    function canEdit(projectId) {
+      return isMember(projectId) && memberRole(projectId) in ['owner', 'editor'];
     }
 
     function incoming() {
@@ -23,60 +41,109 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // --- Validation Helpers ---
-
-    function isValidProject(data) {
-      return data.id is string && data.id.size() <= 128
-          && data.name is string && data.name.size() <= 128
-          && data.tempo is number && data.tempo >= 20 && data.tempo <= 300
-          && data.tracks is list && data.tracks.size() <= 64
-          && data.comments is list && data.comments.size() <= 500
-          && data.updatedAt is number;
+    // Relaxed timestamp: allow client Date.now() within ±30 seconds of server time
+    function recentTimestamp(ts) {
+      return ts is number
+          && ts > (request.time.toMillis() - 30000)
+          && ts < (request.time.toMillis() + 30000);
     }
 
-    function isValidPresence(data) {
-      return data.userId is string && data.userId.size() <= 128
-          && data.userName is string && data.userName.size() <= 128
-          && data.projectId is string && data.projectId.size() <= 128
-          && data.cursorPosition is number && data.cursorPosition >= 0
-          && data.lastActive is number;
+    // ── users/{userId} ────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && uid() == userId;
     }
 
-    // --- Rules ---
-
+    // ── projects/{projectId} ──────────────────────────────────────────────
     match /projects/{projectId} {
-      allow get: if true; // Public read for projects if you have the ID
-      allow list: if false; // No blanket listing
-      
-      allow create: if isSignedIn() 
-                  && isValidId(projectId) 
-                  && isValidProject(incoming())
-                  && incoming().updatedAt == request.time.toMillis();
+      allow get: if isMember(projectId);
+      allow list: if false; // Use userProjects mirror for listing
 
-      allow update: if isSignedIn()
-                  && isValidProject(incoming())
-                  && incoming().updatedAt == request.time.toMillis()
-                  && incoming().id == existing().id; // ID immutability
-      
-      allow delete: if false; // Protect project deletion for now
+      allow create: if isSignedIn()
+                   && incoming().id == projectId
+                   && incoming().ownerId == uid()
+                   && incoming().name is string
+                   && incoming().name.size() > 0
+                   && incoming().name.size() <= 128
+                   && recentTimestamp(incoming().createdAt)
+                   && recentTimestamp(incoming().updatedAt);
+
+      allow update: if isOwner(projectId)
+                   && incoming().id == existing().id
+                   && incoming().ownerId == existing().ownerId
+                   && recentTimestamp(incoming().updatedAt);
+
+      allow delete: if isOwner(projectId);
+
+      // ── projects/{projectId}/members/{memberId} ────────────────────────
+      match /members/{memberId} {
+        allow read: if isMember(projectId);
+        // Owner can add anyone; signed-in user can write their own doc (self-join via invite)
+        allow create: if isOwner(projectId)
+                     || (isSignedIn() && memberId == uid());
+        allow update: if isOwner(projectId);
+        allow delete: if isOwner(projectId) || (isSignedIn() && memberId == uid());
+      }
+
+      // ── projects/{projectId}/invites/{inviteId} ────────────────────────
+      match /invites/{inviteId} {
+        allow read: if isMember(projectId);
+        allow create: if isOwner(projectId);
+        allow update: if isMember(projectId); // for accepting / revoking
+        allow delete: if isOwner(projectId);
+      }
+
+      // ── projects/{projectId}/songs/{songId} ───────────────────────────
+      match /songs/{songId} {
+        allow read: if isMember(projectId);
+
+        allow create: if canEdit(projectId)
+                     && incoming().projectId == projectId
+                     && incoming().name is string
+                     && incoming().tracks is list
+                     && incoming().tracks.size() <= 64
+                     && incoming().comments is list
+                     && incoming().comments.size() <= 500
+                     && incoming().tempo is number
+                     && incoming().tempo >= 20
+                     && incoming().tempo <= 300
+                     && recentTimestamp(incoming().updatedAt);
+
+        allow update: if canEdit(projectId)
+                     && incoming().projectId == existing().projectId
+                     && recentTimestamp(incoming().updatedAt);
+
+        allow delete: if canEdit(projectId);
+      }
     }
 
+    // ── userProjects/{userId}/projects/{projectId} ────────────────────────
+    // Mirror collection for fast per-user project listing
+    match /userProjects/{userId}/projects/{projectId} {
+      allow read: if isSignedIn() && uid() == userId;
+      allow write: if isSignedIn() && uid() == userId;
+    }
+
+    // ── presence/{userId} ────────────────────────────────────────────────
     match /presence/{presenceId} {
-      allow read: if true; // Need to see others' presence
-      
+      allow read: if isSignedIn();
+
       allow create: if isSignedIn()
-                  && isValidId(presenceId)
-                  && isValidPresence(incoming())
-                  && incoming().userId == request.auth.uid
-                  && incoming().lastActive == request.time.toMillis();
+                   && incoming().userId == uid()
+                   && incoming().userId == presenceId
+                   && incoming().userName is string
+                   && incoming().projectId is string
+                   && incoming().songId is string
+                   && incoming().cursorPosition is number
+                   && incoming().cursorPosition >= 0
+                   && recentTimestamp(incoming().lastActive);
 
       allow update: if isSignedIn()
-                  && isValidPresence(incoming())
-                  && incoming().userId == request.auth.uid // Identity integrity
-                  && incoming().lastActive == request.time.toMillis()
-                  && incoming().userId == existing().userId;
-      
-      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+                   && incoming().userId == uid()
+                   && existing().userId == uid()
+                   && recentTimestamp(incoming().lastActive);
+
+      allow delete: if isSignedIn() && existing().userId == uid();
     }
   }
 }
