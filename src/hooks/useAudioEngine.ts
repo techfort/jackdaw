@@ -1,8 +1,8 @@
 import { useRef, useEffect } from 'react';
 import { useStore } from '../store';
+import { getSharedAudioContext } from '../lib/sharedAudioContext';
 
 export const useAudioEngine = () => {
-  const audioContext = useRef<AudioContext | null>(null);
   const trackNodes = useRef<{ [clipId: string]: AudioBufferSourceNode }>({});
   const gainNodes = useRef<{ [clipId: string]: GainNode }>({});
 
@@ -14,13 +14,6 @@ export const useAudioEngine = () => {
     setCurrentTime
   } = useStore();
 
-  const getOrCreateContext = (): AudioContext => {
-    if (!audioContext.current || audioContext.current.state === 'closed') {
-      audioContext.current = new AudioContext();
-    }
-    return audioContext.current;
-  };
-
   const stopAll = () => {
     Object.values(trackNodes.current).forEach((node: AudioBufferSourceNode) => {
       try {
@@ -31,7 +24,7 @@ export const useAudioEngine = () => {
   };
 
   const startPlayback = async (startTime: number) => {
-    const ctx = getOrCreateContext();
+    const ctx = getSharedAudioContext();
 
     stopAll();
 
@@ -39,7 +32,7 @@ export const useAudioEngine = () => {
       try {
         await ctx.resume();
       } catch (e) {
-        console.error('AudioContext resume failed:', e);
+        console.error('[AudioEngine] AudioContext resume failed:', e);
         return;
       }
     }
@@ -48,7 +41,10 @@ export const useAudioEngine = () => {
     console.debug('[AudioEngine] startPlayback', { startTime, contextState: ctx.state, now, trackCount: tracks.length });
 
     tracks.forEach(track => {
-      if (!track.buffer || track.isMuted) return;
+      if (!track.buffer || track.isMuted) {
+        if (!track.buffer) console.debug('[AudioEngine] skipping track (no buffer):', track.name);
+        return;
+      }
 
       const isSoloedSomewhere = tracks.some(t => t.isSoloed);
       const shouldBeHearable = !isSoloedSomewhere || track.isSoloed;
@@ -115,18 +111,18 @@ export const useAudioEngine = () => {
 
   // Handle Mute/Solo/Volume updates in real-time
   useEffect(() => {
-    if (!audioContext.current) return;
+    const ctx = getSharedAudioContext();
     tracks.forEach(track => {
       (track.clips || []).forEach(clip => {
         const gain = gainNodes.current[clip.id];
         if (gain) {
           const isSoloedSomewhere = tracks.some(t => t.isSoloed);
           const shouldBeHearable = !track.isMuted && !clip.isMuted && (!isSoloedSomewhere || track.isSoloed);
-          gain.gain.setTargetAtTime(shouldBeHearable ? track.volume : 0, audioContext.current!.currentTime, 0.05);
+          gain.gain.setTargetAtTime(shouldBeHearable ? track.volume : 0, ctx.currentTime, 0.05);
         }
       });
     });
   }, [tracks]);
 
-  return { audioContext: audioContext.current };
+  return {};
 };

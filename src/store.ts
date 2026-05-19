@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import React, { useMemo } from 'react';
+import { getSharedAudioContext } from './lib/sharedAudioContext';
 import { DAWState, TrackData, TimelineMode, Comment, Clip } from './types';
 import { storageService, authService } from './services/storage';
 
@@ -198,13 +199,7 @@ export const useStore = create<DAWState>((set, get) => {
       try {
         // 1. Load the buffer
         const arrayBuffer = await file.arrayBuffer();
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AudioContextClass) {
-          console.error("AudioContext not supported");
-          return;
-        }
-        const audioContext = new AudioContextClass();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        const audioBuffer = await getSharedAudioContext().decodeAudioData(arrayBuffer);
 
         // 2. Create a new track for the punch-in
         const trackId = generateId();
