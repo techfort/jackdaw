@@ -71,6 +71,7 @@ export interface DAWState {
   // Actions
   setSelectedTrackId: (id: string | null) => void;
   setShowMixer: (show: boolean) => void;
+  clearSong: () => void;
   loadProject: (state: Partial<DAWState>) => void;
   loadSong: (state: Partial<DAWState>) => void;
   syncProject: (id: string) => () => void;

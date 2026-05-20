@@ -79,8 +79,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const tracks = useStore(state => state.tracks);
   const comments = useStore(state => state.comments);
   const currentProjectId = useStore(state => state.currentProjectId);
+  const currentProjectName = useStore(state => state.currentProjectName);
   const currentSongId = useStore(state => state.currentSongId);
   const currentSongName = useStore(state => state.currentSongName);
+  const clearSong = useStore(state => state.clearSong);
   const undo = useStore(state => state.undo);
   const redo = useStore(state => state.redo);
   const canUndo = useStore(state => state.canUndo);
@@ -218,8 +220,29 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           </h1>
         </div>
 
+        {/* Breadcrumb: Project / Song */}
+        {(currentProjectName || currentSongName) && (
+          <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest max-w-[200px]">
+            {currentProjectName && (
+              <button
+                onClick={clearSong}
+                className="text-[var(--color-text-muted)] hover:text-[var(--color-accent)] transition-colors truncate"
+                title="Back to projects"
+              >
+                {currentProjectName}
+              </button>
+            )}
+            {currentProjectName && currentSongName && (
+              <span className="text-white/20">/</span>
+            )}
+            {currentSongName && (
+              <span className="text-white truncate">{currentSongName}</span>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-1 bg-white/5 p-1 rounded border border-white/10">
-          <button 
+          <button
             onClick={() => setShowProjects(!showProjects)}
             className={`p-1.5 rounded transition-all ${showProjects ? 'bg-[var(--color-accent)] text-black' : 'hover:bg-white/10 text-[var(--color-text-muted)]'}`}
             title="Projects"
