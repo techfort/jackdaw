@@ -4,7 +4,8 @@ import { StorageService, SongData, Presence, Project, Member, Invite, Role } fro
 const DB_NAME = 'jackdaw-local-db';
 const SONGS_STORE = 'songs';
 const PROJECTS_STORE = 'projects';
-const VERSION = 2;
+const AUDIO_CACHE_STORE = 'audio-cache';
+const VERSION = 3;
 
 const generateId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID
@@ -21,9 +22,10 @@ export class LocalStorageService implements StorageService {
     this.db = openDB(DB_NAME, VERSION, {
       async upgrade(db, oldVersion, _newVersion, tx) {
         if (oldVersion < 1) {
-          // Fresh install at v2 — create both stores clean
+          // Fresh install at v3 — create all stores clean
           db.createObjectStore(SONGS_STORE, { keyPath: 'id' });
           db.createObjectStore(PROJECTS_STORE, { keyPath: 'id' });
+          db.createObjectStore(AUDIO_CACHE_STORE, { keyPath: 'trackId' });
           return;
         }
 
@@ -42,6 +44,11 @@ export class LocalStorageService implements StorageService {
             await oldStore.delete(record.id);
           }
           // Project metadata records remain in the now-cleaned 'projects' store
+        }
+
+        if (oldVersion < 3) {
+          // v3 adds the audio-cache store for downloaded Firebase Storage files
+          db.createObjectStore(AUDIO_CACHE_STORE, { keyPath: 'trackId' });
         }
       },
     });
@@ -148,6 +155,19 @@ export class LocalStorageService implements StorageService {
     const existing = await db.get(PROJECTS_STORE, id);
     if (!existing) return;
     await db.put(PROJECTS_STORE, { ...existing, ...data, updatedAt: Date.now() });
+  }
+
+  // ── Audio cache (used by FirebaseStorage download path) ──────────────────
+
+  async cacheAudio(trackId: string, audioData: ArrayBuffer): Promise<void> {
+    const db = await this.db;
+    await db.put(AUDIO_CACHE_STORE, { trackId, audioData });
+  }
+
+  async getCachedAudio(trackId: string): Promise<ArrayBuffer | null> {
+    const db = await this.db;
+    const record = await db.get(AUDIO_CACHE_STORE, trackId);
+    return record?.audioData ?? null;
   }
 
   // ── Members — not supported locally ──────────────────────────────────────
