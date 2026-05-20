@@ -10,10 +10,10 @@ import {
   getDoc,
   getDocs
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { sendSignInLinkToEmail } from 'firebase/auth';
 import { db, auth, OperationType, handleFirestoreError } from '../firebaseService';
 import { StorageService, SongData, Presence, Project, Member, Invite, Role } from './types';
+import { createAudioStorage } from '../audioStorage';
 
 const generateId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID
@@ -63,7 +63,10 @@ export class FirebaseStorageService implements StorageService {
 
   async saveSong(projectId: string, songId: string, data: Partial<SongData>): Promise<void> {
     try {
-      const storage = getStorage();
+      const audioStorage = createAudioStorage(async () => {
+        const token = await auth.currentUser?.getIdToken();
+        return token ?? '';
+      });
       const tracks = (data.tracks || []) as any[];
 
       // Upload audio for any track that has audioData but no storagePath yet
@@ -71,15 +74,13 @@ export class FirebaseStorageService implements StorageService {
         tracks.map(async (track) => {
           if (track.audioData && !track.storagePath) {
             try {
-              const path = `audio/${projectId}/${track.id}`;
-              const storageRef = ref(storage, path);
-              await uploadBytes(storageRef, track.audioData);
-              const url = await getDownloadURL(storageRef);
-              return { ...track, storagePath: url };
+              const key = `projects/${projectId}/songs/${songId}/tracks/${track.id}.mp3`;
+              const url = await audioStorage.upload(key, track.audioData, 'audio/mpeg');
+              if (url) return { ...track, storagePath: url };
             } catch (uploadErr) {
               console.warn(`Failed to upload audio for track ${track.id}:`, uploadErr);
-              return track;
             }
+            return track;
           }
           return track;
         })
