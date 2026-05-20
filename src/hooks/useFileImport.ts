@@ -6,8 +6,9 @@ export const useFileImport = () => {
   const addTrack = useStore(state => state.addTrack);
 
   const handleFile = useCallback(async (file: File, offset = 0) => {
-    if (!file.type.startsWith('audio/') && !file.name.endsWith('.ogg')) {
-      alert("Please upload an audio file (.wav, .mp3, .ogg)");
+    const isMp3 = file.type === 'audio/mpeg' || file.name.toLowerCase().endsWith('.mp3');
+    if (!isMp3) {
+      alert('Free tier: MP3 only. WAV/OGG/FLAC support coming on paid plan.');
       return;
     }
 
@@ -26,7 +27,7 @@ export const useFileImport = () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
-    input.accept = 'audio/*';
+    input.accept = '.mp3,audio/mpeg';
     input.onchange = (e) => {
       const files = Array.from((e.target as HTMLInputElement).files || []);
       files.forEach(file => handleFile(file, offset));

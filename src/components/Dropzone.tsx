@@ -24,7 +24,7 @@ export const Dropzone: React.FC = () => {
         </div>
         <div className="text-center">
           <p className="font-medium">Drop audio stems here</p>
-          <p className="text-xs">Supports WAV, MP3, OGG</p>
+          <p className="text-xs">MP3 only · free tier</p>
         </div>
       </div>
     </div>
