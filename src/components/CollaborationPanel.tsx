@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
 import { authService, storageMode } from '../services/storage';
-import { 
-  CheckCircle2, 
-  Circle, 
-  MessageSquare, 
-  Clock, 
+import {
+  CheckCircle2,
+  Circle,
+  MessageSquare,
+  Clock,
   User as UserIcon,
-  Filter,
   Search,
   ChevronRight,
   TrendingUp,
@@ -15,10 +14,12 @@ import {
   Target,
   LogIn,
   LogOut,
-  Edit2
+  Edit2,
+  Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
+import { MembersPanel } from './MembersPanel';
 
 export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { 
@@ -30,6 +31,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
     currentTime,
     currentUser
   } = useStore();
+  const [activeTab, setActiveTab] = useState<'comments' | 'members'>('comments');
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('open');
   const [search, setSearch] = useState('');
   const [showIdentityEdit, setShowIdentityEdit] = useState(false);
@@ -134,7 +136,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
               <TrendingUp size={20} className="text-black" />
             </div>
             <div>
-              <h2 className="text-sm font-black uppercase tracking-widest text-white">Project Hub</h2>
+              <h2 className="text-sm font-black uppercase tracking-widest text-white">Collaboration</h2>
               <div className="flex items-center gap-2">
                 <span className="flex h-1.5 w-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />
                 <p className="text-[9px] text-[var(--color-text-muted)] font-black uppercase tracking-tighter">
@@ -151,6 +153,23 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
           </button>
         </div>
 
+        {/* Tab switcher */}
+        <div className="flex gap-1 bg-black/20 p-1 rounded-lg border border-white/5 mb-5">
+          <button
+            onClick={() => setActiveTab('comments')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === 'comments' ? 'bg-zinc-700 text-white shadow-lg' : 'text-white/30 hover:text-white hover:bg-white/5'}`}
+          >
+            <MessageSquare size={10} /> Notes
+          </button>
+          <button
+            onClick={() => setActiveTab('members')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === 'members' ? 'bg-zinc-700 text-white shadow-lg' : 'text-white/30 hover:text-white hover:bg-white/5'}`}
+          >
+            <Users size={10} /> Members
+          </button>
+        </div>
+
+        {activeTab === 'members' ? null : (<>
         {/* Stats Row */}
         <div className="grid grid-cols-3 gap-3 mb-5">
           <div className="bg-white/[0.03] p-3 rounded-xl border border-white/5">
@@ -276,10 +295,14 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
             ))}
           </div>
         </div>
+        </>)}
       </div>
 
-      {/* Task List */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4">
+      {/* Members tab body */}
+      {activeTab === 'members' && <MembersPanel />}
+
+      {/* Task List (comments tab) */}
+      {activeTab === 'comments' && <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4">
         {filteredComments.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-20 text-center px-10">
             <div className="w-16 h-16 rounded-3xl bg-white/5 flex items-center justify-center mb-4 border border-white/5">
@@ -400,7 +423,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
             ))}
           </motion.div>
         )}
-      </div>
+      </div>}
 
       {/* Footer / Workflow Tip */}
       <div className="p-4 bg-[var(--color-bg-deep)] border-t border-[var(--color-border-main)]">

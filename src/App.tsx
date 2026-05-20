@@ -16,6 +16,8 @@ import { Dropzone } from './components/Dropzone';
 import { Mixer } from './components/Mixer';
 import { CollaborationPanel } from './components/CollaborationPanel';
 import { CollaborativeCursors } from './components/CollaborativeCursors';
+import { ProjectDashboard } from './components/ProjectDashboard';
+import { InviteAccept } from './components/InviteAccept';
 import { Users, LayoutDashboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -174,6 +176,8 @@ export default function App() {
     };
   }, []); // Only set up once
 
+  const currentSongIdForRender = useStore(state => state.currentSongId);
+
   useAudioEngine(); // Initialize audio engine
   usePresenceSync(); // Throttled presence updates
 
@@ -260,6 +264,24 @@ export default function App() {
       setSignInError(err.message || 'Failed to send sign-in link');
     }
   };
+
+  if (!showSignInGate && !currentSongIdForRender) {
+    return (
+      <>
+        <ProjectDashboard />
+        <AnimatePresence>
+          {inviteParams && (
+            <InviteAccept
+              inviteId={inviteParams.inviteId}
+              projectId={inviteParams.projectId}
+              onAccepted={() => setInviteParams(null)}
+              onDismiss={() => setInviteParams(null)}
+            />
+          )}
+        </AnimatePresence>
+      </>
+    );
+  }
 
   if (showSignInGate) {
     return (
@@ -470,6 +492,18 @@ export default function App() {
            <span className="text-[10px] text-[var(--color-text-dark)] font-mono tracking-tighter">JACKDAW-ENGINE_V1</span>
         </div>
       </footer>
+
+      {/* InviteAccept modal — can appear over the DAW too */}
+      <AnimatePresence>
+        {inviteParams && (
+          <InviteAccept
+            inviteId={inviteParams.inviteId}
+            projectId={inviteParams.projectId}
+            onAccepted={() => setInviteParams(null)}
+            onDismiss={() => setInviteParams(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

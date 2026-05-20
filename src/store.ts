@@ -64,6 +64,9 @@ export const useStore = create<DAWState>((set, get) => {
 
     setCurrentUser: (user) => set({ currentUser: user }),
     setSelectedTrackId: (id) => set({ selectedTrackId: id }),
+    clearSong: () => {
+      set({ currentSongId: null, currentSongName: 'Untitled Song', tracks: [], comments: [], isPlaying: false, isSyncing: false });
+    },
     setShowMixer: (show) => set({ showMixer: show }),
     setFollowPlayhead: (followPlayhead) => set({ followPlayhead }),
     setTool: (activeTool) => set({ activeTool }),
