@@ -74,7 +74,8 @@ export default function App() {
   const isPlaying = useStore(state => state.isPlaying);
   const followPlayhead = useStore(state => state.followPlayhead);
   const currentProjectId = useStore(state => state.currentProjectId);
-  const syncProject = useStore(state => state.syncProject);
+  const currentSongId = useStore(state => state.currentSongId);
+  const syncSong = useStore(state => state.syncSong);
   const isSyncing = useStore(state => state.isSyncing);
   const remotePresences = useStore(state => state.remotePresences);
   const setMarker = useStore(state => state.setMarker);
@@ -86,6 +87,7 @@ export default function App() {
   const setShowMixer = useStore(state => state.setShowMixer);
 
   const [showCollaboration, setShowCollaboration] = React.useState(false);
+  const [inviteParams, setInviteParams] = React.useState<{ inviteId: string; projectId: string } | null>(null);
   const { importFiles } = useFileImport();
 
   const projectDuration = useProjectDuration();
@@ -179,7 +181,17 @@ export default function App() {
 
     // Check for magic link completion if using Firebase
     if ((authService as any).completeMagicLinkSignIn) {
-      (authService as any).completeMagicLinkSignIn().catch(console.error);
+      (authService as any).completeMagicLinkSignIn()
+        .then(() => {
+          // After sign-in resolves, check for invite params in the URL
+          const params = new URLSearchParams(window.location.search);
+          const inviteId = params.get('invite');
+          const projectId = params.get('project');
+          if (inviteId && projectId) {
+            setInviteParams({ inviteId, projectId });
+          }
+        })
+        .catch(console.error);
     } else {
       // Auto-sign in anonymously in local mode if no user
       if (!authService.getCurrentUser()) {
@@ -190,13 +202,13 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Handle Sync side-effects
+  // Handle Sync side-effects — watches both projectId and songId
   useEffect(() => {
-    if (currentProjectId) {
-      const unsubscribe = syncProject(currentProjectId);
+    if (currentProjectId && currentSongId) {
+      const unsubscribe = syncSong(currentProjectId, currentSongId);
       return () => unsubscribe();
     }
-  }, [currentProjectId, syncProject]);
+  }, [currentProjectId, currentSongId, syncSong]);
 
   const viewportRef = useRef<HTMLDivElement>(null);
 
