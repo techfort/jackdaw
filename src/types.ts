@@ -22,6 +22,7 @@ export interface TrackData {
   name: string;
   buffer?: AudioBuffer | null;
   audioData?: ArrayBuffer; // Stored raw data for persistence
+  storagePath?: string;    // Firebase Storage path: audio/{projectId}/{trackId}
   volume: number; // 0 to 1
   isMuted: boolean;
   isSoloed: boolean;
