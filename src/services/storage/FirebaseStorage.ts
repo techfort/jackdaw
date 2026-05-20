@@ -27,7 +27,34 @@ export class FirebaseStorageService implements StorageService {
     try {
       const snap = await getDoc(doc(db, 'projects', projectId, 'songs', songId));
       if (!snap.exists()) return null;
-      return snap.data() as SongData;
+      const song = snap.data() as SongData;
+
+      // Fetch audio for any track that has a storagePath but no local audioData
+      const { LocalStorageService } = await import('./LocalStorage');
+      const localCache = new LocalStorageService();
+
+      const tracksWithAudio = await Promise.all(
+        (song.tracks || []).map(async (track: any) => {
+          if (track.storagePath && !track.audioData) {
+            const cached = await localCache.getCachedAudio(track.id);
+            if (cached) {
+              return { ...track, audioData: cached };
+            }
+            try {
+              const response = await fetch(track.storagePath);
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              const audioData = await response.arrayBuffer();
+              await localCache.cacheAudio(track.id, audioData);
+              return { ...track, audioData };
+            } catch (fetchErr) {
+              console.warn(`Failed to fetch audio for track ${track.id}:`, fetchErr);
+            }
+          }
+          return track;
+        })
+      );
+
+      return { ...song, tracks: tracksWithAudio };
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, `projects/${projectId}/songs/${songId}`);
       return null;
