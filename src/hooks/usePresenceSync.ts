@@ -2,12 +2,12 @@ import { useEffect, useRef } from 'react';
 import { useStore } from '../store';
 
 export const usePresenceSync = () => {
-  const { currentTime, updatePresence, isSyncing, currentProjectId } = useStore();
+  const { currentTime, updatePresence, isSyncing, currentProjectId, currentSongId } = useStore();
   const lastUpdatedTime = useRef(0);
   const lastPos = useRef(0);
 
   useEffect(() => {
-    if (!isSyncing || !currentProjectId) return;
+    if (!isSyncing || !currentProjectId || !currentSongId) return;
 
     const now = Date.now();
     // Send presence every 1s OR if position changed significantly (scrubbing)
@@ -18,5 +18,5 @@ export const usePresenceSync = () => {
       lastUpdatedTime.current = now;
       lastPos.current = currentTime;
     }
-  }, [currentTime, isSyncing, currentProjectId, updatePresence]);
+  }, [currentTime, isSyncing, currentProjectId, currentSongId, updatePresence]);
 };
