@@ -9,7 +9,7 @@ import { useAudioEngine } from './hooks/useAudioEngine';
 import { useFileImport } from './hooks/useFileImport';
 import { usePresenceSync } from './hooks/usePresenceSync';
 import { Toolbar } from './components/Toolbar';
-import { authService } from './services/storage';
+import { authService, storageMode } from './services/storage';
 import { TimelineRuler } from './components/TimelineRuler';
 import { TrackItem } from './components/TrackItem';
 import { Dropzone } from './components/Dropzone';
@@ -88,6 +88,10 @@ export default function App() {
 
   const [showCollaboration, setShowCollaboration] = React.useState(false);
   const [inviteParams, setInviteParams] = React.useState<{ inviteId: string; projectId: string } | null>(null);
+  const [showSignInGate, setShowSignInGate] = React.useState(false);
+  const [signInEmail, setSignInEmail] = React.useState('');
+  const [signInSent, setSignInSent] = React.useState(false);
+  const [signInError, setSignInError] = React.useState('');
   const { importFiles } = useFileImport();
 
   const projectDuration = useProjectDuration();
@@ -177,23 +181,27 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = authService.onAuthStateChanged((user) => {
       useStore.getState().setCurrentUser(user);
+      if (storageMode === 'firebase') {
+        setShowSignInGate(!user);
+      }
     });
 
-    // Check for magic link completion if using Firebase
     if ((authService as any).completeMagicLinkSignIn) {
+      // Firebase mode: complete any in-progress magic link sign-in
       (authService as any).completeMagicLinkSignIn()
-        .then(() => {
-          // After sign-in resolves, check for invite params in the URL
-          const params = new URLSearchParams(window.location.search);
-          const inviteId = params.get('invite');
-          const projectId = params.get('project');
-          if (inviteId && projectId) {
-            setInviteParams({ inviteId, projectId });
+        .then((user: any) => {
+          if (user) {
+            const params = new URLSearchParams(window.location.search);
+            const inviteId = params.get('invite');
+            const projectId = params.get('project');
+            if (inviteId && projectId) {
+              setInviteParams({ inviteId, projectId });
+            }
           }
         })
         .catch(console.error);
     } else {
-      // Auto-sign in anonymously in local mode if no user
+      // Local mode: auto-sign in anonymously if no user
       if (!authService.getCurrentUser()) {
         authService.anonymousSignIn().catch(console.error);
       }
@@ -241,9 +249,55 @@ export default function App() {
     };
   }, [zoom, setZoom]);
 
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signInEmail.trim()) return;
+    setSignInError('');
+    try {
+      await authService.signInMagicLink(signInEmail.trim());
+      setSignInSent(true);
+    } catch (err: any) {
+      setSignInError(err.message || 'Failed to send sign-in link');
+    }
+  };
+
+  if (showSignInGate) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[var(--color-bg-deep)] text-[#adbac7]">
+        <div className="w-full max-w-sm p-8 bg-[var(--color-bg-sidebar)] border border-[var(--color-border-main)] rounded-xl shadow-2xl">
+          <h1 className="text-xl font-black uppercase tracking-widest mb-1 text-white">JackDAW</h1>
+          <p className="text-xs text-[var(--color-text-muted)] mb-8">Sign in to collaborate</p>
+          {signInSent ? (
+            <p className="text-sm text-[var(--color-accent)] font-bold">
+              Check your email — a sign-in link is on its way to {signInEmail}.
+            </p>
+          ) : (
+            <form onSubmit={handleSignIn} className="space-y-4">
+              <input
+                type="email"
+                value={signInEmail}
+                onChange={e => setSignInEmail(e.target.value)}
+                placeholder="your@email.com"
+                required
+                className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)]"
+              />
+              {signInError && <p className="text-xs text-red-400">{signInError}</p>}
+              <button
+                type="submit"
+                className="w-full bg-[var(--color-accent)] text-black font-black uppercase tracking-widest text-xs py-2.5 rounded hover:brightness-110 transition-all"
+              >
+                Send Sign-in Link
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div 
-      className="h-screen flex flex-col font-sans select-none overflow-hidden bg-[var(--color-bg-deep)] text-[#adbac7] dark" 
+    <div
+      className="h-screen flex flex-col font-sans select-none overflow-hidden bg-[var(--color-bg-deep)] text-[#adbac7] dark"
       id="jackdaw-root"
       onContextMenu={(e) => e.preventDefault()}
     >

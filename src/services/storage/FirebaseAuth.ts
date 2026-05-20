@@ -1,14 +1,29 @@
-import { 
-  signInAnonymously, 
-  signOut, 
+import {
+  signInAnonymously,
+  signOut,
   onAuthStateChanged,
   updateProfile,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink
 } from 'firebase/auth';
-import { auth } from '../firebaseService';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../firebaseService';
 import { AuthService, User } from './types';
+
+async function ensureUserProfile(firebaseUser: { uid: string; displayName: string | null; email: string | null; isAnonymous: boolean }) {
+  if (firebaseUser.isAnonymous) return;
+  try {
+    await setDoc(doc(db, 'users', firebaseUser.uid), {
+      id: firebaseUser.uid,
+      name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || `User ${firebaseUser.uid.slice(0, 4)}`,
+      email: firebaseUser.email || null,
+      updatedAt: Date.now()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Failed to write user profile:', err);
+  }
+}
 
 export class FirebaseAuthService implements AuthService {
   getCurrentUser(): User | null {
@@ -22,10 +37,11 @@ export class FirebaseAuthService implements AuthService {
   }
 
   onAuthStateChanged(callback: (user: User | null) => void): () => void {
-    return onAuthStateChanged(auth, (fbUser) => {
+    return onAuthStateChanged(auth, async (fbUser) => {
       if (!fbUser) {
         callback(null);
       } else {
+        await ensureUserProfile(fbUser);
         callback({
           id: fbUser.uid,
           name: fbUser.displayName || `Collaborator ${fbUser.uid.slice(0, 4)}`,
@@ -37,15 +53,14 @@ export class FirebaseAuthService implements AuthService {
   }
 
   async signInMagicLink(email: string): Promise<void> {
-    const actionCodeSettings = {
-      url: window.location.href, // Or a specific dashboard URL
-      handleCodeInApp: true,
-    };
-    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+    const callbackUrl = window.location.href.split('?')[0]; // strip existing params
+    await sendSignInLinkToEmail(auth, email, {
+      url: callbackUrl,
+      handleCodeInApp: true
+    });
     window.localStorage.setItem('emailForSignIn', email);
   }
 
-  // Handle magic link completion
   async completeMagicLinkSignIn(): Promise<User | null> {
     if (isSignInWithEmailLink(auth, window.location.href)) {
       let email = window.localStorage.getItem('emailForSignIn');
@@ -55,7 +70,11 @@ export class FirebaseAuthService implements AuthService {
       if (email) {
         const result = await signInWithEmailLink(auth, email, window.location.href);
         window.localStorage.removeItem('emailForSignIn');
+        // Clean invite/magic link params from URL without triggering a reload
+        const clean = window.location.pathname;
+        window.history.replaceState({}, '', clean);
         if (result.user) {
+          await ensureUserProfile(result.user);
           return {
             id: result.user.uid,
             name: result.user.displayName || email.split('@')[0],
@@ -84,5 +103,6 @@ export class FirebaseAuthService implements AuthService {
   async updateProfile(name: string): Promise<void> {
     if (!auth.currentUser) return;
     await updateProfile(auth.currentUser, { displayName: name });
+    await ensureUserProfile({ ...auth.currentUser, displayName: name });
   }
 }
