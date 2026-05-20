@@ -195,7 +195,9 @@ export const useStore = create<DAWState>((set, get) => {
         await (storageService as any).saveSong(currentProjectId, currentSongId, {
           tempo,
           comments,
-          tracks: tracks.map(({ buffer, audioData, ...rest }) => rest), // Keep it light
+          // Pass audioData so FirebaseStorage can upload it; saveSong strips it before Firestore write.
+          // LocalStorage handles audioData separately via its own IDB store.
+          tracks: tracks.map(({ buffer, ...rest }) => rest),
           updatedAt: now
         });
       } catch (err) {
