@@ -180,10 +180,34 @@ export class FirebaseStorageService implements StorageService {
     try {
       const userId = auth.currentUser.uid;
       const mirrors = await getDocs(collection(db, 'userProjects', userId, 'projects'));
-      const projects = await Promise.all(
-        mirrors.docs.map(m => this.getProject(m.data().projectId as string))
+
+      if (mirrors.docs.length > 0) {
+        const projects = await Promise.all(
+          mirrors.docs.map(m => this.getProject(m.data().projectId as string))
+        );
+        return projects.filter((p): p is Project => p !== null);
+      }
+
+      // Fallback for legacy data: list owned projects directly when mirrors are missing.
+      const ownedQuery = query(collection(db, 'projects'), where('ownerId', '==', userId));
+      const ownedSnap = await getDocs(ownedQuery);
+      const ownedProjects = ownedSnap.docs.map(d => d.data() as Project);
+
+      // Backfill userProjects mirrors so future reads are fast and consistent.
+      await Promise.all(
+        ownedProjects.map(project => setDoc(
+          doc(db, 'userProjects', userId, 'projects', project.id),
+          {
+            projectId: project.id,
+            name: project.name,
+            role: 'owner',
+            joinedAt: project.createdAt || Date.now()
+          },
+          { merge: true }
+        ))
       );
-      return projects.filter((p): p is Project => p !== null);
+
+      return ownedProjects;
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, 'userProjects');
       return [];
