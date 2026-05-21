@@ -139,6 +139,11 @@ export const MembersPanel: React.FC = () => {
                     <div className="flex items-center gap-1 mt-0.5">
                       {roleIcon(m.role)}
                       <span className="text-[8px] text-white/30 uppercase font-bold">{roleLabel(m.role)}</span>
+                      {m.role === 'owner' && (
+                        <span className="text-[8px] text-[var(--color-accent)] uppercase font-black tracking-widest ml-1">
+                          Project owner
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

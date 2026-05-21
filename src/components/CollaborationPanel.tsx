@@ -36,6 +36,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
   const [search, setSearch] = useState('');
   const [showIdentityEdit, setShowIdentityEdit] = useState(false);
   const [newEmail, setNewEmail] = useState('');
+  const [newDisplayName, setNewDisplayName] = useState('');
   const [newName, setNewName] = useState('');
   const [authStatus, setAuthStatus] = useState<string | null>(null);
 
@@ -44,7 +45,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
     if (!newEmail) return;
     try {
       setAuthStatus('Sending link...');
-      await authService.signInMagicLink(newEmail);
+      await authService.signInMagicLink(newEmail, newDisplayName.trim() || undefined);
       setAuthStatus('Check your email!');
     } catch (err: any) {
       setAuthStatus(err.message);
@@ -245,6 +246,13 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                       value={newEmail}
                       onChange={(e) => setNewEmail(e.target.value)}
                       placeholder="email@example.com"
+                      className="flex-1 bg-black/40 border border-white/10 rounded-lg py-1.5 px-3 text-[10px] focus:outline-none focus:border-[var(--color-accent)]/50"
+                    />
+                    <input 
+                      type="text"
+                      value={newDisplayName}
+                      onChange={(e) => setNewDisplayName(e.target.value)}
+                      placeholder="Display name"
                       className="flex-1 bg-black/40 border border-white/10 rounded-lg py-1.5 px-3 text-[10px] focus:outline-none focus:border-[var(--color-accent)]/50"
                     />
                     <button type="submit" className="bg-[var(--color-accent)] px-3 py-1 rounded-lg text-[9px] font-black uppercase text-black hover:scale-105 transition-transform">
