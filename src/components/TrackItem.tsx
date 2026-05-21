@@ -14,6 +14,12 @@ import { useStore } from '../store';
 import { TrackData } from '../types';
 import { WaveformRenderer } from './WaveformRenderer';
 import { format } from 'date-fns';
+import {
+  muteTrackByReference,
+  removeTrackByReference,
+  selectTrackByReference,
+  soloTrackByReference,
+} from '../lib/commandActions';
 
 interface TrackItemProps {
   track: TrackData;
@@ -21,7 +27,6 @@ interface TrackItemProps {
 
 export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const updateTrack = useStore(state => state.updateTrack);
-  const removeTrack = useStore(state => state.removeTrack);
   const zoom = useStore(state => state.zoom);
   const snapEnabled = useStore(state => state.snapEnabled);
   const tempo = useStore(state => state.tempo);
@@ -55,7 +60,6 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const commentDraft = useStore(state => state.commentDraft);
   const setCommentDraft = useStore(state => state.setCommentDraft);
   const selectedTrackId = useStore(state => state.selectedTrackId);
-  const setSelectedTrackId = useStore(state => state.setSelectedTrackId);
   const isSelected = selectedTrackId === track.id;
   const [draftText, setDraftText] = React.useState("");
 
@@ -88,7 +92,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
     <div 
       className={`flex h-32 border-b border-[var(--color-border-main)] group relative w-full ${commentDraft?.trackId === track.id ? 'z-50' : ''} ${isSelected ? 'bg-[var(--color-accent)]/[0.08]' : 'bg-transparent'}`} 
       id={`track-${track.id}`}
-      onClick={() => setSelectedTrackId(track.id)}
+      onClick={() => selectTrackByReference(track.id)}
     >
       {/* Controls - Sticky Left */}
       <div className={`w-64 border-r border-[var(--color-border-main)] p-4 flex flex-col justify-between shrink-0 z-20 track-controls sticky left-0 shadow-2xl transition-colors duration-200 ${isSelected ? 'bg-[var(--color-bg-sidebar)]' : 'bg-[var(--color-bg-sidebar)] opacity-80'}`}>
@@ -107,7 +111,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
               <MessageSquarePlus size={14} />
             </button>
             <button 
-              onClick={() => removeTrack(track.id)} 
+              onClick={() => removeTrackByReference(track.id)} 
               className="p-1.5 text-[var(--color-text-dark)] hover:text-red-500 hover:bg-[var(--color-bg-input)] rounded transition-colors"
               title="Remove track"
             >
@@ -119,13 +123,19 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
         <div className="flex items-center gap-2">
           <div className="flex gap-1">
             <button 
-              onClick={() => updateTrack(track.id, { isMuted: !track.isMuted })}
+              onClick={() => {
+                if (track.isMuted) updateTrack(track.id, { isMuted: false });
+                else muteTrackByReference(track.id);
+              }}
               className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isMuted ? 'bg-[var(--color-accent-purple)]/20 border-[var(--color-accent-purple)] text-[var(--color-accent-purple)]' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               M
             </button>
             <button 
-              onClick={() => updateTrack(track.id, { isSoloed: !track.isSoloed })}
+              onClick={() => {
+                if (track.isSoloed) updateTrack(track.id, { isSoloed: false });
+                else soloTrackByReference(track.id);
+              }}
               className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isSoloed ? 'bg-[var(--color-accent)] border-black text-black' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               S
@@ -190,7 +200,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                 opacity: isClipMuted && !isSelected ? 0.3 : 1
               }}
               onMouseDown={(e) => {
-                setSelectedTrackId(track.id);
+                selectTrackByReference(track.id);
                 if (e.button !== 0 || e.shiftKey) return;
                 e.stopPropagation();
 

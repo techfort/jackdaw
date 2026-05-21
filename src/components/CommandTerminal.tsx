@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useStore } from '../store';
+import React, { useEffect, useRef, useState } from 'react';
+import { executeTerminalCommand } from '../lib/commandActions';
 
 type TerminalLine = {
   id: string;
@@ -12,39 +12,15 @@ const makeLineId = () =>
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2);
 
-const parseTrackArg = (raw: string): { kind: 'id' | 'name'; value: string } => {
-  const trimmed = raw.trim();
-  const quoted = trimmed.match(/^"(.+)"$/);
-  if (quoted) {
-    return { kind: 'name', value: quoted[1].trim() };
-  }
-  if (/^\d+$/.test(trimmed)) {
-    return { kind: 'id', value: trimmed };
-  }
-  return { kind: 'name', value: trimmed };
-};
-
 export const CommandTerminal: React.FC = () => {
-  const tracks = useStore(state => state.tracks);
-  const addEmptyTrack = useStore(state => state.addEmptyTrack);
-  const removeTrack = useStore(state => state.removeTrack);
-
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [lines, setLines] = useState<TerminalLine[]>([
-    { id: makeLineId(), text: 'Ready. Commands: add track "name", rm track "name"|id', tone: 'info' }
+    { id: makeLineId(), text: 'Ready. Commands: add track, rm track, sel, go, ff, rw, s, m', tone: 'info' }
   ]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
-
-  const trackLocalIds = useMemo(() => {
-    const map = new Map<string, number>();
-    tracks.forEach((track, index) => {
-      map.set(track.id, index + 1);
-    });
-    return map;
-  }, [tracks]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -80,45 +56,9 @@ export const CommandTerminal: React.FC = () => {
     if (!command) return;
 
     pushLine(`🎵 ${command}`, 'command');
-
-    const addMatch = command.match(/^add\s+track\s+(.+)$/i);
-    if (addMatch) {
-      const arg = parseTrackArg(addMatch[1]);
-      if (!arg.value) {
-        pushLine('Track name is required.', 'error');
-        return;
-      }
-      const trackId = addEmptyTrack(arg.value);
-      const localId = trackLocalIds.get(trackId) ?? tracks.length + 1;
-      pushLine(`Added track "${arg.value}" (id: ${localId}).`, 'info');
-      return;
-    }
-
-    const rmMatch = command.match(/^rm\s+track\s+(.+)$/i);
-    if (rmMatch) {
-      const arg = parseTrackArg(rmMatch[1]);
-      let targetTrack = null as (typeof tracks)[number] | null;
-
-      if (arg.kind === 'id') {
-        const localId = Number(arg.value);
-        targetTrack = tracks[localId - 1] || null;
-      } else {
-        const lower = arg.value.toLowerCase();
-        targetTrack = tracks.find(track => track.name.toLowerCase() === lower) || null;
-      }
-
-      if (!targetTrack) {
-        pushLine(`Track not found: ${arg.value}`, 'error');
-        return;
-      }
-
-      const removedLocalId = trackLocalIds.get(targetTrack.id) || 0;
-      removeTrack(targetTrack.id);
-      pushLine(`Removed track "${targetTrack.name}" (id: ${removedLocalId}).`, 'info');
-      return;
-    }
-
-    pushLine('Unknown command. Use: add track "name" or rm track "name"|id', 'error');
+    const result = executeTerminalCommand(command);
+    if (!result.message) return;
+    pushLine(result.message, result.ok ? 'info' : 'error');
   };
 
   return (
@@ -135,7 +75,7 @@ export const CommandTerminal: React.FC = () => {
           🎵 Terminal
         </button>
       ) : (
-        <div className="w-[420px] h-40 rounded border border-[var(--color-border-main)] bg-[var(--color-bg-sidebar)] shadow-2xl flex flex-col overflow-hidden">
+        <div className="w-[420px] h-56 rounded border border-[var(--color-border-main)] bg-[var(--color-bg-sidebar)] shadow-2xl flex flex-col overflow-hidden">
           <div className="h-7 px-2 border-b border-[var(--color-border-main)] bg-black/20 flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-muted)]">Command Terminal</span>
             <button
