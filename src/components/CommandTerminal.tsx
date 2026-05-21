@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { executeTerminalCommand } from '../lib/commandActions';
+import { useStore } from '../store';
 
 type TerminalLine = {
   id: string;
@@ -13,6 +14,8 @@ const makeLineId = () =>
     : Math.random().toString(36).slice(2);
 
 export const CommandTerminal: React.FC = () => {
+  const isPlaying = useStore(state => state.isPlaying);
+  const setIsPlaying = useStore(state => state.setIsPlaying);
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [lines, setLines] = useState<TerminalLine[]>([
@@ -110,6 +113,10 @@ export const CommandTerminal: React.FC = () => {
               event.preventDefault();
               const current = input;
               setInput('');
+              if (!current.trim()) {
+                setIsPlaying(!isPlaying);
+                return;
+              }
               handleCommand(current);
             }}
           >
