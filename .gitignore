@@ -15,3 +15,9 @@ coverage/
 # Ignore AI/CLI tool state/config
 .claude/
 .antigravitycli/
+
+# Sensitive/local config files
+.env.local
+firebase-applet-config.json
+.firebaserc
+cloudflare-worker/wrangler.toml
