@@ -124,8 +124,12 @@ export const muteTrackByReference = (ref: string): CommandResult => {
   }
 
   const id = localTrackId(state.tracks, target.id);
-  state.updateTrack(target.id, { isMuted: true });
-  return { ok: true, message: `Muted track "${target.name}" (id: ${id}).` };
+  const nextMuted = !target.isMuted;
+  state.updateTrack(target.id, { isMuted: nextMuted });
+  return {
+    ok: true,
+    message: `${nextMuted ? 'Muted' : 'Unmuted'} track "${target.name}" (id: ${id}).`
+  };
 };
 
 export const soloTrackByReference = (ref: string): CommandResult => {
@@ -136,8 +140,12 @@ export const soloTrackByReference = (ref: string): CommandResult => {
   }
 
   const id = localTrackId(state.tracks, target.id);
-  state.updateTrack(target.id, { isSoloed: true });
-  return { ok: true, message: `Soloed track "${target.name}" (id: ${id}).` };
+  const nextSolo = !target.isSoloed;
+  state.updateTrack(target.id, { isSoloed: nextSolo });
+  return {
+    ok: true,
+    message: `${nextSolo ? 'Soloed' : 'Unsoloed'} track "${target.name}" (id: ${id}).`
+  };
 };
 
 export const addTrackByName = (name: string): CommandResult => {
