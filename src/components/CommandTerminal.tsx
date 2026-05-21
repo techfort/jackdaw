@@ -118,6 +118,12 @@ export const CommandTerminal: React.FC = () => {
               ref={inputRef}
               value={input}
               onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Tab') {
+                  event.preventDefault();
+                  (event.currentTarget as HTMLInputElement).blur();
+                }
+              }}
               className="flex-1 bg-transparent text-[11px] font-mono text-white outline-none"
               placeholder="type command..."
               aria-label="Terminal command input"
