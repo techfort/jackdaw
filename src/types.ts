@@ -94,7 +94,7 @@ export interface DAWState {
   updateTrack: (id: string, updates: Partial<TrackData>, silent?: boolean) => void;
   updateClip: (trackId: string, clipId: string, updates: Partial<Clip>, silent?: boolean) => void;
   removeClip: (trackId: string, clipId: string) => void;
-  addComment: (trackId: string, timestamp: number, text: string) => void;
+  addComment: (trackId: string, timestamp: number, text: string) => string;
   toggleResolveComment: (id: string) => void;
   removeComment: (id: string) => void;
   setTempo: (tempo: number) => void;

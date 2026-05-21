@@ -3,7 +3,6 @@ import {
   Volume2, 
   VolumeX, 
   MessageSquarePlus, 
-  MessageSquare, 
   Trash2,
   CheckCircle2,
   Circle,
@@ -345,6 +344,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                   <div className={`w-4 h-4 rounded-full flex items-center justify-center ${comment.isResolved ? 'bg-green-500/20' : 'bg-[var(--color-accent)]/20'}`}>
                     <UserIcon size={10} className={comment.isResolved ? 'text-green-500' : 'text-[var(--color-accent)]'} />
                   </div>
+                  <span className="text-[9px] font-black text-[var(--color-text-muted)] font-mono">#{comment.id}</span>
                   <span className="text-[10px] font-black text-white/70 uppercase tracking-tight">{comment.userName || 'Artist'}</span>
                 </div>
                 <div className="flex items-center gap-1">
@@ -385,13 +385,13 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                 e.stopPropagation();
                 toggleResolveComment(comment.id);
               }}
-              className={`absolute top-4 -left-2 w-4 h-4 rounded-full border-2 border-black flex items-center justify-center transition-all ${
+              className={`absolute top-3 -left-3 min-w-6 h-6 px-1 rounded-full border-2 border-black flex items-center justify-center transition-all ${
                 comment.isResolved 
                   ? 'bg-green-500 text-black hover:scale-110' 
                   : 'bg-[var(--color-playhead)] text-black hover:scale-125'
               }`}
             >
-              {comment.isResolved ? <CheckCircle2 size={10} /> : <MessageSquare size={8} fill="currentColor" />}
+              <span className="text-[8px] font-black font-mono leading-none">{comment.id}</span>
             </button>
           </div>
         ))}

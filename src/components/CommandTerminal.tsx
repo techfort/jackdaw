@@ -22,7 +22,7 @@ export const CommandTerminal: React.FC = () => {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [historyDraft, setHistoryDraft] = useState('');
   const [lines, setLines] = useState<TerminalLine[]>([
-    { id: makeLineId(), text: 'Ready. Commands: add track, rm track, sel, go, ff, rw, s, m, c: "comment"', tone: 'info' }
+    { id: makeLineId(), text: 'Ready. Commands: add track, rm track, rm c, sel, go, ff, rw, s, m, c: "comment"', tone: 'info' }
   ]);
 
   const inputRef = useRef<HTMLInputElement>(null);
