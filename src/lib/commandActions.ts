@@ -206,6 +206,36 @@ export const rewind = (token: string): CommandResult => {
   return { ok: true, message: `Moved back ${delta.toFixed(2)}s.` };
 };
 
+export const addCommentFromCommand = (commentText: string, trackRef?: string): CommandResult => {
+  const state = useStore.getState();
+  const text = (commentText || '').trim();
+  if (!text) {
+    return { ok: false, message: 'Comment text is required.' };
+  }
+
+  let targetTrack: TrackData | null = null;
+
+  if (trackRef && trackRef.trim()) {
+    targetTrack = findTrackByReference(state.tracks, trackRef);
+    if (!targetTrack) {
+      return { ok: false, message: `Track not found: ${trackRef}` };
+    }
+  } else if (state.selectedTrackId) {
+    targetTrack = state.tracks.find(track => track.id === state.selectedTrackId) || null;
+  }
+
+  if (!targetTrack) {
+    return { ok: false, message: 'No track selected. Use sel <id|name> first or c <id|name>: "comment".' };
+  }
+
+  const localId = localTrackId(state.tracks, targetTrack.id);
+  state.addComment(targetTrack.id, state.currentTime || 0, text);
+  return {
+    ok: true,
+    message: `Comment added to "${targetTrack.name}" (id: ${localId}) at ${Number(state.currentTime || 0).toFixed(2)}s.`
+  };
+};
+
 export const executeTerminalCommand = (raw: string): CommandResult => {
   const command = raw.trim();
   if (!command) {
@@ -253,8 +283,18 @@ export const executeTerminalCommand = (raw: string): CommandResult => {
     return muteTrackByReference(match[1]);
   }
 
+  match = command.match(/^c:\s*"([\s\S]+)"\s*$/i);
+  if (match) {
+    return addCommentFromCommand(match[1]);
+  }
+
+  match = command.match(/^c\s+(.+?)\s*:\s*"([\s\S]+)"\s*$/i);
+  if (match) {
+    return addCommentFromCommand(match[2], match[1]);
+  }
+
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, sel, go, ff, rw, s, m',
+    message: 'Unknown command. Use: add track, rm track, sel, go, ff, rw, s, m, c:',
   };
 };

@@ -16,7 +16,7 @@ export const CommandTerminal: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [lines, setLines] = useState<TerminalLine[]>([
-    { id: makeLineId(), text: 'Ready. Commands: add track, rm track, sel, go, ff, rw, s, m', tone: 'info' }
+    { id: makeLineId(), text: 'Ready. Commands: add track, rm track, sel, go, ff, rw, s, m, c: "comment"', tone: 'info' }
   ]);
 
   const inputRef = useRef<HTMLInputElement>(null);
