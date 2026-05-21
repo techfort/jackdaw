@@ -11,3 +11,7 @@ coverage/
 .dolt/
 *.db
 .beads-credential-key
+
+# Ignore AI/CLI tool state/config
+.claude/
+.antigravitycli/
