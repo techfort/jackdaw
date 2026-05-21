@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0782729807",
-  "appId": "1:998647855910:web:bdc2fce29bc77c477f9fe7",
-  "apiKey": "AIzaSyA3UFRf8SK7Q8syBuLM3Bhoe1Q9ee2kUjc",
-  "authDomain": "gen-lang-client-0782729807.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-jackdaw-10a755c1-6c69-4e6b-9ae2-fc62a2f56693",
-  "storageBucket": "gen-lang-client-0782729807.firebasestorage.app",
-  "messagingSenderId": "998647855910",
-  "measurementId": ""
+  "apiKey": "AIzaSyBfwIodAOmfFvR9-9CoY9aTMfvIIk9KRsE",
+  "authDomain": "jackdaw-e862a.firebaseapp.com",
+  "projectId": "jackdaw-e862a",
+  "storageBucket": "jackdaw-e862a.firebasestorage.app",
+  "messagingSenderId": "1046255793627",
+  "appId": "1:1046255793627:web:6f46de19988b7d05c1a3fe",
+  "measurementId": "G-XSDYDLWX9T",
+  "firestoreDatabaseId": "(default)"
 }
