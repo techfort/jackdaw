@@ -30,6 +30,24 @@ const localTrackId = (tracks: TrackData[], id: string): number => {
   return index >= 0 ? index + 1 : 0;
 };
 
+const getAutoCommentTarget = (tracks: TrackData[], currentTime: number): TrackData | null => {
+  const hasSolo = tracks.some(track => track.isSoloed);
+
+  const playable = tracks.filter(track => {
+    if (!track.buffer || track.isMuted) return false;
+    if (hasSolo && !track.isSoloed) return false;
+
+    return (track.clips || []).some(clip => {
+      if (clip.isMuted) return false;
+      const clipEnd = Number(clip.offset || 0) + Number(clip.duration || 0);
+      return currentTime < clipEnd;
+    });
+  });
+
+  if (playable.length === 1) return playable[0];
+  return null;
+};
+
 const parseClockToken = (token: string): number | null => {
   const parts = token.trim().split(':').map(part => part.trim());
   if (parts.length < 2 || parts.length > 3) return null;
@@ -222,10 +240,12 @@ export const addCommentFromCommand = (commentText: string, trackRef?: string): C
     }
   } else if (state.selectedTrackId) {
     targetTrack = state.tracks.find(track => track.id === state.selectedTrackId) || null;
+  } else {
+    targetTrack = getAutoCommentTarget(state.tracks, Number(state.currentTime || 0));
   }
 
   if (!targetTrack) {
-    return { ok: false, message: 'No track selected. Use sel <id|name> first or c <id|name>: "comment".' };
+    return { ok: false, message: 'select a track before commenting' };
   }
 
   const localId = localTrackId(state.tracks, targetTrack.id);
