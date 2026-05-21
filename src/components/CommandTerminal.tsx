@@ -18,6 +18,9 @@ export const CommandTerminal: React.FC = () => {
   const setIsPlaying = useStore(state => state.setIsPlaying);
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [historyDraft, setHistoryDraft] = useState('');
   const [lines, setLines] = useState<TerminalLine[]>([
     { id: makeLineId(), text: 'Ready. Commands: add track, rm track, sel, go, ff, rw, s, m, c: "comment"', tone: 'info' }
   ]);
@@ -62,6 +65,39 @@ export const CommandTerminal: React.FC = () => {
     const result = executeTerminalCommand(command);
     if (!result.message) return;
     pushLine(result.message, result.ok ? 'info' : 'error');
+  };
+
+  const navigateHistory = (direction: 'up' | 'down') => {
+    if (history.length === 0) return;
+
+    if (direction === 'up') {
+      if (historyIndex === -1) {
+        setHistoryDraft(input);
+        const nextIndex = history.length - 1;
+        setHistoryIndex(nextIndex);
+        setInput(history[nextIndex]);
+        return;
+      }
+
+      if (historyIndex > 0) {
+        const nextIndex = historyIndex - 1;
+        setHistoryIndex(nextIndex);
+        setInput(history[nextIndex]);
+      }
+      return;
+    }
+
+    if (historyIndex === -1) return;
+
+    if (historyIndex < history.length - 1) {
+      const nextIndex = historyIndex + 1;
+      setHistoryIndex(nextIndex);
+      setInput(history[nextIndex]);
+      return;
+    }
+
+    setHistoryIndex(-1);
+    setInput(historyDraft);
   };
 
   return (
@@ -117,6 +153,9 @@ export const CommandTerminal: React.FC = () => {
                 setIsPlaying(!isPlaying);
                 return;
               }
+              setHistory(prev => [...prev, current]);
+              setHistoryIndex(-1);
+              setHistoryDraft('');
               handleCommand(current);
             }}
           >
@@ -129,6 +168,18 @@ export const CommandTerminal: React.FC = () => {
                 if (event.key === 'Tab') {
                   event.preventDefault();
                   (event.currentTarget as HTMLInputElement).blur();
+                  return;
+                }
+
+                if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  navigateHistory('up');
+                  return;
+                }
+
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  navigateHistory('down');
                 }
               }}
               className="flex-1 bg-transparent text-[11px] font-mono text-white outline-none"
