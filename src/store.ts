@@ -421,10 +421,19 @@ export const useStore = create<DAWState>((set, get) => {
       const user = get().currentUser;
       const userId = user?.id || 'anonymous';
       const userName = user?.name || 'Musician';
+      const existingIds = get().comments.map(c => c.id);
+      const maxNumericId = existingIds.reduce((max, id) => {
+        const parsed = Number(id);
+        return Number.isInteger(parsed) ? Math.max(max, parsed) : max;
+      }, 0);
+      let nextCommentId = String(maxNumericId + 1);
+      while (existingIds.includes(nextCommentId)) {
+        nextCommentId = String(Number(nextCommentId) + 1);
+      }
       
       set((state) => ({
         comments: [...state.comments, {
-          id: generateId(),
+          id: nextCommentId,
           trackId,
           timestamp,
           text,
@@ -436,6 +445,7 @@ export const useStore = create<DAWState>((set, get) => {
         canUndo: true
       }));
       get().pushUpdate().catch(err => console.error("Update failed", err));
+      return nextCommentId;
     },
 
     toggleResolveComment: (id) => {

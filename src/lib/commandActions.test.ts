@@ -10,7 +10,7 @@ vi.mock('../store', () => {
   return { useStore };
 });
 
-import { addCommentFromCommand } from './commandActions';
+import { addCommentFromCommand, executeTerminalCommand } from './commandActions';
 
 describe('addCommentFromCommand auto track resolution', () => {
   beforeEach(() => {
@@ -80,5 +80,53 @@ describe('addCommentFromCommand auto track resolution', () => {
     expect(result.ok).toBe(false);
     expect(result.message).toBe('select a track before commenting');
     expect(addComment).not.toHaveBeenCalled();
+  });
+
+  it('returns assigned comment id in terminal feedback', () => {
+    const addComment = vi.fn().mockReturnValue('7');
+    getStateMock.mockReturnValue({
+      currentTime: 4,
+      selectedTrackId: 'track-1',
+      tracks: [
+        {
+          id: 'track-1',
+          name: 'Lead',
+          buffer: {},
+          isMuted: false,
+          isSoloed: false,
+          clips: [{ id: 'c1', offset: 0, duration: 20, audioStart: 0, isMuted: false }],
+        },
+      ],
+      addComment,
+    });
+
+    const result = addCommentFromCommand('vocal too bright');
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain('Comment #7');
+  });
+
+  it('removes comment by id via rm c command', () => {
+    const removeComment = vi.fn();
+    getStateMock.mockReturnValue({
+      comments: [
+        {
+          id: '3',
+          trackId: 'track-1',
+          timestamp: 10,
+          text: 'Need cleanup',
+          userId: 'u1',
+          userName: 'User',
+          isResolved: false,
+          createdAt: Date.now(),
+        },
+      ],
+      removeComment,
+    });
+
+    const result = executeTerminalCommand('rm c 3');
+
+    expect(result.ok).toBe(true);
+    expect(removeComment).toHaveBeenCalledWith('3');
   });
 });

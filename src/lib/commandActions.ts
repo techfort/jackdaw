@@ -249,11 +249,27 @@ export const addCommentFromCommand = (commentText: string, trackRef?: string): C
   }
 
   const localId = localTrackId(state.tracks, targetTrack.id);
-  state.addComment(targetTrack.id, state.currentTime || 0, text);
+  const commentId = state.addComment(targetTrack.id, state.currentTime || 0, text);
   return {
     ok: true,
-    message: `Comment added to "${targetTrack.name}" (id: ${localId}) at ${Number(state.currentTime || 0).toFixed(2)}s.`
+    message: `Comment #${commentId} added to "${targetTrack.name}" (id: ${localId}) at ${Number(state.currentTime || 0).toFixed(2)}s.`
   };
+};
+
+export const removeCommentById = (commentId: string): CommandResult => {
+  const state = useStore.getState();
+  const normalized = (commentId || '').trim().replace(/^#/, '');
+  if (!normalized) {
+    return { ok: false, message: 'Comment id is required.' };
+  }
+
+  const target = state.comments.find(comment => comment.id === normalized);
+  if (!target) {
+    return { ok: false, message: `Comment not found: ${normalized}` };
+  }
+
+  state.removeComment(normalized);
+  return { ok: true, message: `Removed comment #${normalized}.` };
 };
 
 export const executeTerminalCommand = (raw: string): CommandResult => {
@@ -271,6 +287,11 @@ export const executeTerminalCommand = (raw: string): CommandResult => {
   match = command.match(/^rm\s+track\s+(.+)$/i);
   if (match) {
     return removeTrackByReference(match[1].trim().replace(/^"(.+)"$/, '$1'));
+  }
+
+  match = command.match(/^rm\s+c\s+(.+)$/i);
+  if (match) {
+    return removeCommentById(match[1]);
   }
 
   match = command.match(/^sel\s+(.+)$/i);
@@ -315,6 +336,6 @@ export const executeTerminalCommand = (raw: string): CommandResult => {
 
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, sel, go, ff, rw, s, m, c:',
+    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, c:',
   };
 };
