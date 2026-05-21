@@ -106,8 +106,13 @@ export default function App() {
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input/textarea
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      // Ignore typing targets, except empty terminal input where UI shortcuts should still work.
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA'].includes(target.tagName)) {
+        const isTerminalInput = target.id === 'jackdaw-terminal-input';
+        const terminalIsEmpty = isTerminalInput && (((target as HTMLInputElement).value || '').trim() === '');
+        if (!terminalIsEmpty) return;
+      }
 
       const key = e.key.toLowerCase();
       
