@@ -25,7 +25,7 @@ export const ProjectDashboard: React.FC = () => {
 
   useEffect(() => {
     loadProjectList();
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (selectedProject) loadSongList(selectedProject.id);
