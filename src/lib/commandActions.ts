@@ -1,5 +1,7 @@
 import { useStore } from '../store';
 import { TrackData } from '../types';
+import { storageService } from '../services/storage';
+import { exportMixdown } from './exportUtils';
 
 export type CommandResult = {
   ok: boolean;
@@ -7,6 +9,10 @@ export type CommandResult = {
 };
 
 const BEATS_PER_BAR = 4;
+const ZOOM_IN_FACTOR = 1.1;
+const ZOOM_OUT_FACTOR = 0.9;
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const findTrackByReference = (tracks: TrackData[], rawRef: string): TrackData | null => {
   const ref = rawRef.trim();
@@ -166,6 +172,53 @@ export const soloTrackByReference = (ref: string): CommandResult => {
   };
 };
 
+const parseVolumeCommandArgs = (rawArgs: string): { ref: string | null; amount: number | null } => {
+  const cleaned = (rawArgs || '').trim();
+  if (!cleaned) return { ref: null, amount: null };
+
+  const quoted = cleaned.match(/^"(.+)"\s+(.+)$/);
+  if (quoted) {
+    const amount = Number(quoted[2].trim());
+    return { ref: quoted[1], amount: Number.isFinite(amount) ? amount : null };
+  }
+
+  const parts = cleaned.split(/\s+/);
+  if (parts.length === 1) {
+    const amount = Number(parts[0]);
+    return { ref: null, amount: Number.isFinite(amount) ? amount : null };
+  }
+
+  const amount = Number(parts.slice(1).join(' '));
+  return { ref: parts[0], amount: Number.isFinite(amount) ? amount : null };
+};
+
+export const adjustTrackVolume = (rawArgs: string, direction: 'up' | 'down'): CommandResult => {
+  const state = useStore.getState();
+  const parsed = parseVolumeCommandArgs(rawArgs);
+  if (parsed.amount === null || parsed.amount <= 0) {
+    return { ok: false, message: 'Volume amount must be a positive number.' };
+  }
+
+  const target = parsed.ref
+    ? findTrackByReference(state.tracks, parsed.ref)
+    : (state.selectedTrackId ? state.tracks.find(track => track.id === state.selectedTrackId) || null : null);
+
+  if (!target) {
+    return { ok: false, message: parsed.ref ? `Track not found: ${parsed.ref}` : 'select a track before changing volume' };
+  }
+
+  const currentVolume = Number(target.volume) || 0;
+  const delta = direction === 'up' ? parsed.amount : -parsed.amount;
+  const nextVolume = Math.max(0, Math.min(1, currentVolume + delta));
+  state.updateTrack(target.id, { volume: nextVolume });
+
+  const id = localTrackId(state.tracks, target.id);
+  return {
+    ok: true,
+    message: `${direction === 'up' ? 'Raised' : 'Lowered'} track "${target.name}" (id: ${id}) volume by ${parsed.amount.toFixed(3)} to ${Math.round(nextVolume * 100)}%.`
+  };
+};
+
 export const addTrackByName = (name: string): CommandResult => {
   const state = useStore.getState();
   const trimmed = name.trim();
@@ -272,7 +325,80 @@ export const removeCommentById = (commentId: string): CommandResult => {
   return { ok: true, message: `Removed comment #${normalized}.` };
 };
 
-export const executeTerminalCommand = (raw: string): CommandResult => {
+export const inviteCollaboratorByEmail = async (emailRaw: string): Promise<CommandResult> => {
+  const state = useStore.getState();
+  const email = (emailRaw || '').trim().toLowerCase();
+  if (!email) {
+    return { ok: false, message: 'Email is required. Use: invite <email>' };
+  }
+
+  if (!EMAIL_PATTERN.test(email)) {
+    return { ok: false, message: `Invalid email: ${emailRaw}` };
+  }
+
+  if (!state.currentProjectId) {
+    return { ok: false, message: 'No project loaded.' };
+  }
+
+  try {
+    await storageService.inviteToProject(state.currentProjectId, email, 'editor');
+    return { ok: true, message: `Invite sent to ${email}.` };
+  } catch (error: any) {
+    return { ok: false, message: error?.message || 'Failed to send invite.' };
+  }
+};
+
+export const exportFromCommand = async (selectionOnly: boolean): Promise<CommandResult> => {
+  const state = useStore.getState();
+  if (!state.tracks?.length) {
+    return { ok: false, message: 'No tracks to export.' };
+  }
+
+  if (selectionOnly) {
+    const marker1 = state.markers?.[1] ?? null;
+    const marker2 = state.markers?.[2] ?? null;
+    if (marker1 === null || marker2 === null) {
+      return { ok: false, message: 'Set markers 1 and 2 before using e stem.' };
+    }
+
+    const start = Math.min(marker1, marker2);
+    const end = Math.max(marker1, marker2);
+    if (end <= start) {
+      return { ok: false, message: 'Invalid marker range for e stem.' };
+    }
+
+    await exportMixdown(state.tracks, { startTime: start, endTime: end });
+    return { ok: true, message: `Exported stem between markers (${start.toFixed(2)}s-${end.toFixed(2)}s).` };
+  }
+
+  await exportMixdown(state.tracks);
+  return { ok: true, message: 'Exported full mixdown.' };
+};
+
+export const zoomFromTerminalSigns = (signs: string): CommandResult => {
+  const state = useStore.getState();
+  const token = (signs || '').trim();
+
+  if (!token || !/^[+-]+$/.test(token)) {
+    return { ok: false, message: 'Zoom command must use only + or only - signs.' };
+  }
+
+  if (token.includes('+') && token.includes('-')) {
+    return { ok: false, message: 'Mixed zoom signs are not allowed.' };
+  }
+
+  const currentZoom = Number(state.zoom) || 100;
+  const factor = token[0] === '+' ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
+  const nextZoom = currentZoom * Math.pow(factor, token.length);
+  state.setZoom(nextZoom);
+
+  return {
+    ok: true,
+    message: `${token[0] === '+' ? 'Zoomed in' : 'Zoomed out'} ${token.length} step${token.length === 1 ? '' : 's'} (${(Number(useStore.getState().zoom) || 100).toFixed(2)}%).`,
+  };
+};
+
+export const executeTerminalCommand = async (raw: string): Promise<CommandResult> => {
   const command = raw.trim();
   if (!command) {
     return { ok: true, message: '' };
@@ -324,6 +450,11 @@ export const executeTerminalCommand = (raw: string): CommandResult => {
     return muteTrackByReference(match[1]);
   }
 
+  match = command.match(/^v([ud])\s+(.+)$/i);
+  if (match) {
+    return adjustTrackVolume(match[2], match[1].toLowerCase() === 'u' ? 'up' : 'down');
+  }
+
   match = command.match(/^c:\s*"([\s\S]+)"\s*$/i);
   if (match) {
     return addCommentFromCommand(match[1]);
@@ -334,8 +465,25 @@ export const executeTerminalCommand = (raw: string): CommandResult => {
     return addCommentFromCommand(match[2], match[1]);
   }
 
+  match = command.match(/^invite\s+(.+)$/i);
+  if (match) {
+    return inviteCollaboratorByEmail(match[1]);
+  }
+
+  if (/^e\s+stem$/i.test(command)) {
+    return exportFromCommand(true);
+  }
+
+  if (/^e$/i.test(command)) {
+    return exportFromCommand(false);
+  }
+
+  if (/^[+-]+$/.test(command)) {
+    return zoomFromTerminalSigns(command);
+  }
+
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, c:',
+    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu, vd, c:, invite, e, e stem, +, -, ++, --',
   };
 };

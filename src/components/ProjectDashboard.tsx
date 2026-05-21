@@ -22,6 +22,8 @@ export const ProjectDashboard: React.FC = () => {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [creatingProject, setCreatingProject] = useState(false);
   const [creatingSong, setCreatingSong] = useState(false);
+  const ownerLabel = (project: Project) =>
+    project.ownerName || (project.ownerId === currentUser?.id ? currentUser?.name : 'Unknown');
 
   useEffect(() => {
     loadProjectList();
@@ -196,7 +198,12 @@ export const ProjectDashboard: React.FC = () => {
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <FolderOpen size={14} className={selectedProject?.id === p.id ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'} />
-                    <span className="text-xs font-bold truncate text-white">{p.name}</span>
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold truncate text-white block">{p.name}</span>
+                      <span className="text-[9px] text-[var(--color-text-dark)] block truncate">
+                        Owner: {ownerLabel(p)}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-1">
                     {selectedProject?.id === p.id && <ChevronRight size={12} className="text-[var(--color-accent)]" />}

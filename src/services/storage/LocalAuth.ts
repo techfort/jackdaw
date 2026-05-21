@@ -25,13 +25,13 @@ export class LocalAuthService implements AuthService {
     return () => this.listeners.delete(callback);
   }
 
-  async signInMagicLink(email: string): Promise<void> {
+  async signInMagicLink(email: string, displayName?: string): Promise<void> {
     // In local mode, magic link just "works" instantly for mocking
     // or we could say "local mode doesn't support cloud auth"
     console.log(`Local mode: simulating sign in for ${email}`);
     const newUser: User = {
-      id: btoa(email),
-      name: email.split('@')[0],
+      id: email,
+      name: displayName?.trim() || email.split('@')[0],
       email,
       isAnonymous: false
     };
