@@ -87,6 +87,7 @@ export interface DAWState {
   setFollowPlayhead: (follow: boolean) => void;
   setTool: (tool: 'select' | 'scissors' | 'mute') => void;
   setCommentDraft: (draft: { trackId: string; timestamp: number } | null) => void;
+  addEmptyTrack: (name: string) => string;
   addTrack: (buffer: AudioBuffer, name: string, audioData?: ArrayBuffer, offset?: number) => void;
   splitTrack: (trackId: string, timestamp: number) => void;
   removeTrack: (id: string) => void;
