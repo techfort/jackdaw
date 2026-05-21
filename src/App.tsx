@@ -106,15 +106,19 @@ export default function App() {
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore typing targets, except empty terminal input where UI shortcuts should still work.
+      // Ignore typing targets, except selected transport/navigation controls in empty terminal input.
       const target = e.target as HTMLElement;
+      const key = e.key.toLowerCase();
       if (['INPUT', 'TEXTAREA'].includes(target.tagName)) {
         const isTerminalInput = target.id === 'jackdaw-terminal-input';
         const terminalIsEmpty = isTerminalInput && (((target as HTMLInputElement).value || '').trim() === '');
         if (!terminalIsEmpty) return;
-      }
 
-      const key = e.key.toLowerCase();
+        // In terminal context, keep command typing isolated from UI letter shortcuts
+        // like 'c'/'i'. Allow only transport and timeline movement controls.
+        const allowedInTerminal = new Set([' ', 'spacebar', 'h', 'e', '1', '2', 'r', 'f', 'escape']);
+        if (!allowedInTerminal.has(key)) return;
+      }
       
       const state = useStore.getState();
       
