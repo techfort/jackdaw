@@ -19,6 +19,7 @@ import { CollaborativeCursors } from './components/CollaborativeCursors';
 import { ProjectDashboard } from './components/ProjectDashboard';
 import { InviteAccept } from './components/InviteAccept';
 import { CommandTerminal } from './components/CommandTerminal';
+import { CheatSheetBar } from './components/CheatSheetBar';
 import { Users, LayoutDashboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -459,6 +460,8 @@ export default function App() {
 
         <CommandTerminal />
       </div>
+
+      <CheatSheetBar />
 
       {/* Footer / Status Bar */}
       <footer className="h-8 border-t border-[var(--color-border-main)] bg-[var(--color-bg-deep)] px-4 flex items-center justify-between shrink-0">
