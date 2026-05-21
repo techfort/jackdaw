@@ -153,7 +153,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA'].includes(target.tagName)) {
+        const isTerminalInput = target.id === 'jackdaw-terminal-input';
+        const terminalIsEmpty = isTerminalInput && (((target as HTMLInputElement).value || '').trim() === '');
+        if (!terminalIsEmpty) return;
+      }
 
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;

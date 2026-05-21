@@ -149,10 +149,7 @@ export const CommandTerminal: React.FC = () => {
               event.preventDefault();
               const current = input;
               setInput('');
-              if (!current.trim()) {
-                setIsPlaying(!isPlaying);
-                return;
-              }
+              if (!current.trim()) return;
               setHistory(prev => [...prev, current]);
               setHistoryIndex(-1);
               setHistoryDraft('');
@@ -161,6 +158,7 @@ export const CommandTerminal: React.FC = () => {
           >
             <span className="text-sm leading-none">🎵</span>
             <input
+              id="jackdaw-terminal-input"
               ref={inputRef}
               value={input}
               onChange={(event) => setInput(event.target.value)}
