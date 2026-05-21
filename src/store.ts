@@ -302,6 +302,31 @@ export const useStore = create<DAWState>((set, get) => {
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
+    addEmptyTrack: (name) => {
+      const trimmedName = (name || '').trim() || `Track ${get().tracks.length + 1}`;
+      const newTrackId = generateId();
+      pushToHistory();
+      set((state) => ({
+        tracks: [...state.tracks, {
+          id: newTrackId,
+          name: trimmedName,
+          volume: 0.8,
+          isMuted: false,
+          isSoloed: false,
+          clips: [{
+            id: generateId(),
+            offset: 0,
+            duration: 4,
+            audioStart: 0,
+            isMuted: false,
+          }],
+        }],
+        canUndo: true
+      }));
+      get().pushUpdate().catch(err => console.error("Update failed", err));
+      return newTrackId;
+    },
+
     splitTrack: (trackId, timelineTime) => {
       pushToHistory();
       set((state) => {

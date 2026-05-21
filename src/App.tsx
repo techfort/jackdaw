@@ -18,6 +18,7 @@ import { CollaborationPanel } from './components/CollaborationPanel';
 import { CollaborativeCursors } from './components/CollaborativeCursors';
 import { ProjectDashboard } from './components/ProjectDashboard';
 import { InviteAccept } from './components/InviteAccept';
+import { CommandTerminal } from './components/CommandTerminal';
 import { Users, LayoutDashboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -455,6 +456,8 @@ export default function App() {
             <CollaborationPanel onClose={() => setShowCollaboration(false)} />
           )}
         </AnimatePresence>
+
+        <CommandTerminal />
       </div>
 
       {/* Footer / Status Bar */}
