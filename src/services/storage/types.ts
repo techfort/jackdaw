@@ -49,6 +49,7 @@ export interface Project {
   id: string;
   name: string;
   ownerId: string;
+  ownerName?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -56,7 +57,7 @@ export interface Project {
 export interface AuthService {
   getCurrentUser(): User | null;
   onAuthStateChanged(callback: (user: User | null) => void): () => void;
-  signInMagicLink(email: string): Promise<void>;
+  signInMagicLink(email: string, displayName?: string): Promise<void>;
   anonymousSignIn(): Promise<User>;
   signOut(): Promise<void>;
   updateProfile(name: string): Promise<void>;

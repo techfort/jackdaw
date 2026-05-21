@@ -21,6 +21,36 @@ const generateId = () =>
     : Math.random().toString(36).substring(2, 15);
 
 export class FirebaseStorageService implements StorageService {
+  private getUserKey(): string | null {
+    return auth.currentUser?.email || auth.currentUser?.uid || null;
+  }
+
+  private async hydrateProjectOwnerName(project: Project): Promise<Project> {
+    if (project.ownerName) return project;
+
+    try {
+      const ownerSnap = await getDoc(doc(db, 'users', project.ownerId));
+      if (ownerSnap.exists()) {
+        const ownerData = ownerSnap.data() as { name?: string; email?: string };
+        return {
+          ...project,
+          ownerName: ownerData.name || ownerData.email?.split('@')[0] || project.ownerId
+        };
+      }
+    } catch {
+      // Ignore owner enrichment failures and fall back to project data.
+    }
+
+    if (auth.currentUser && project.ownerId === (auth.currentUser.email || auth.currentUser.uid)) {
+      return {
+        ...project,
+        ownerName: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || project.ownerId
+      };
+    }
+
+    return project;
+  }
+
   // ── Song ops ──────────────────────────────────────────────────────────────
 
   async getSong(projectId: string, songId: string): Promise<SongData | null> {
@@ -140,17 +170,24 @@ export class FirebaseStorageService implements StorageService {
   async createProject(name: string): Promise<Project> {
     if (!auth.currentUser) throw new Error('Must be signed in to create a project');
     const id = generateId();
-    const userId = auth.currentUser.uid;
+    const userId = this.getUserKey() || auth.currentUser.uid;
     const now = Date.now();
 
-    const project: Project = { id, name, ownerId: userId, createdAt: now, updatedAt: now };
+    const project: Project = {
+      id,
+      name,
+      ownerId: userId,
+      ownerName: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || `User ${userId.slice(0, 4)}`,
+      createdAt: now,
+      updatedAt: now
+    };
 
     await setDoc(doc(db, 'projects', id), project);
 
     await setDoc(doc(db, 'projects', id, 'members', userId), {
       userId,
       role: 'owner',
-      name: auth.currentUser.displayName || `User ${userId.slice(0, 4)}`,
+      name: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || `User ${userId.slice(0, 4)}`,
       joinedAt: now
     } as Member);
 
@@ -168,7 +205,7 @@ export class FirebaseStorageService implements StorageService {
     try {
       const snap = await getDoc(doc(db, 'projects', id));
       if (!snap.exists()) return null;
-      return snap.data() as Project;
+      return this.hydrateProjectOwnerName(snap.data() as Project);
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, `projects/${id}`);
       return null;
@@ -178,25 +215,36 @@ export class FirebaseStorageService implements StorageService {
   async listUserProjects(): Promise<Project[]> {
     if (!auth.currentUser) return [];
     try {
-      const userId = auth.currentUser.uid;
-      const mirrors = await getDocs(collection(db, 'userProjects', userId, 'projects'));
+      const primaryUserId = this.getUserKey() || auth.currentUser.uid;
+      const fallbackUserId = auth.currentUser.uid;
+      const userIds = primaryUserId === fallbackUserId ? [primaryUserId] : [primaryUserId, fallbackUserId];
 
-      if (mirrors.docs.length > 0) {
-        const projects = await Promise.all(
-          mirrors.docs.map(m => this.getProject(m.data().projectId as string))
-        );
+      const mirrors = await Promise.all(
+        userIds.map(userId => getDocs(collection(db, 'userProjects', userId, 'projects')))
+      );
+
+      const mirrorProjectIds = new Set<string>();
+      mirrors.flatMap(snap => snap.docs).forEach(docSnap => {
+        const projectId = docSnap.data().projectId as string;
+        if (projectId) mirrorProjectIds.add(projectId);
+      });
+
+      if (mirrorProjectIds.size > 0) {
+        const projects = await Promise.all(Array.from(mirrorProjectIds).map(projectId => this.getProject(projectId)));
         return projects.filter((p): p is Project => p !== null);
       }
 
       // Fallback for legacy data: list owned projects directly when mirrors are missing.
-      const ownedQuery = query(collection(db, 'projects'), where('ownerId', '==', userId));
+      const ownedQuery = userIds.length > 1
+        ? query(collection(db, 'projects'), where('ownerId', 'in', userIds))
+        : query(collection(db, 'projects'), where('ownerId', '==', userIds[0]));
       const ownedSnap = await getDocs(ownedQuery);
-      const ownedProjects = ownedSnap.docs.map(d => d.data() as Project);
+      const ownedProjects = await Promise.all(ownedSnap.docs.map(async d => this.hydrateProjectOwnerName(d.data() as Project)));
 
       // Backfill userProjects mirrors so future reads are fast and consistent.
       await Promise.all(
         ownedProjects.map(project => setDoc(
-          doc(db, 'userProjects', userId, 'projects', project.id),
+          doc(db, 'userProjects', primaryUserId, 'projects', project.id),
           {
             projectId: project.id,
             name: project.name,
@@ -285,7 +333,7 @@ export class FirebaseStorageService implements StorageService {
 
   async acceptInvite(inviteId: string, projectId: string): Promise<void> {
     if (!auth.currentUser) throw new Error('Must be signed in to accept invite');
-    const userId = auth.currentUser.uid;
+    const userId = this.getUserKey() || auth.currentUser.uid;
     const userEmail = auth.currentUser.email;
 
     const inviteSnap = await getDoc(doc(db, 'projects', projectId, 'invites', inviteId));
@@ -303,7 +351,7 @@ export class FirebaseStorageService implements StorageService {
     await setDoc(doc(db, 'projects', projectId, 'members', userId), {
       userId,
       role: invite.role,
-      name: auth.currentUser.displayName || `User ${userId.slice(0, 4)}`,
+      name: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || `User ${userId.slice(0, 4)}`,
       joinedAt: now
     } as Member);
 
