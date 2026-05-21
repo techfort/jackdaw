@@ -2,7 +2,7 @@ import {
   signInAnonymously,
   signOut,
   onAuthStateChanged,
-  updateProfile,
+  updateProfile as firebaseUpdateProfile,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink
@@ -13,9 +13,10 @@ import { AuthService, User } from './types';
 
 async function ensureUserProfile(firebaseUser: { uid: string; displayName: string | null; email: string | null; isAnonymous: boolean }) {
   if (firebaseUser.isAnonymous) return;
+  const userId = firebaseUser.email || firebaseUser.uid;
   try {
-    await setDoc(doc(db, 'users', firebaseUser.uid), {
-      id: firebaseUser.uid,
+    await setDoc(doc(db, 'users', userId), {
+      id: userId,
       name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || `User ${firebaseUser.uid.slice(0, 4)}`,
       email: firebaseUser.email || null,
       updatedAt: Date.now()
@@ -28,9 +29,10 @@ async function ensureUserProfile(firebaseUser: { uid: string; displayName: strin
 export class FirebaseAuthService implements AuthService {
   getCurrentUser(): User | null {
     if (!auth.currentUser) return null;
+    const userId = auth.currentUser.email || auth.currentUser.uid;
     return {
-      id: auth.currentUser.uid,
-      name: auth.currentUser.displayName || `Collaborator ${auth.currentUser.uid.slice(0, 4)}`,
+      id: userId,
+      name: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || `Collaborator ${auth.currentUser.uid.slice(0, 4)}`,
       email: auth.currentUser.email || undefined,
       isAnonymous: auth.currentUser.isAnonymous
     };
@@ -42,9 +44,10 @@ export class FirebaseAuthService implements AuthService {
         callback(null);
       } else {
         await ensureUserProfile(fbUser);
+        const userId = fbUser.email || fbUser.uid;
         callback({
-          id: fbUser.uid,
-          name: fbUser.displayName || `Collaborator ${fbUser.uid.slice(0, 4)}`,
+          id: userId,
+          name: fbUser.displayName || fbUser.email?.split('@')[0] || `Collaborator ${fbUser.uid.slice(0, 4)}`,
           email: fbUser.email || undefined,
           isAnonymous: fbUser.isAnonymous
         });
@@ -52,13 +55,18 @@ export class FirebaseAuthService implements AuthService {
     });
   }
 
-  async signInMagicLink(email: string): Promise<void> {
+  async signInMagicLink(email: string, displayName?: string): Promise<void> {
     const callbackUrl = window.location.href.split('?')[0]; // strip existing params
     await sendSignInLinkToEmail(auth, email, {
       url: callbackUrl,
       handleCodeInApp: true
     });
     window.localStorage.setItem('emailForSignIn', email);
+    if (displayName?.trim()) {
+      window.localStorage.setItem('displayNameForSignIn', displayName.trim());
+    } else {
+      window.localStorage.removeItem('displayNameForSignIn');
+    }
   }
 
   async completeMagicLinkSignIn(): Promise<User | null> {
@@ -70,14 +78,19 @@ export class FirebaseAuthService implements AuthService {
       if (email) {
         const result = await signInWithEmailLink(auth, email, window.location.href);
         window.localStorage.removeItem('emailForSignIn');
+        const pendingDisplayName = window.localStorage.getItem('displayNameForSignIn');
+        window.localStorage.removeItem('displayNameForSignIn');
         // Clean invite/magic link params from URL without triggering a reload
         const clean = window.location.pathname;
         window.history.replaceState({}, '', clean);
         if (result.user) {
+          if (pendingDisplayName) {
+            await firebaseUpdateProfile(result.user, { displayName: pendingDisplayName });
+          }
           await ensureUserProfile(result.user);
           return {
-            id: result.user.uid,
-            name: result.user.displayName || email.split('@')[0],
+            id: result.user.email || result.user.uid,
+            name: result.user.displayName || pendingDisplayName || email.split('@')[0],
             email: result.user.email || undefined,
             isAnonymous: result.user.isAnonymous
           };
@@ -102,7 +115,7 @@ export class FirebaseAuthService implements AuthService {
 
   async updateProfile(name: string): Promise<void> {
     if (!auth.currentUser) return;
-    await updateProfile(auth.currentUser, { displayName: name });
+    await firebaseUpdateProfile(auth.currentUser, { displayName: name });
     await ensureUserProfile({ ...auth.currentUser, displayName: name });
   }
 }

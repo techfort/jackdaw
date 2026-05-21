@@ -23,6 +23,9 @@ import { CheatSheetBar } from './components/CheatSheetBar';
 import { Users, LayoutDashboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+const ZOOM_IN_FACTOR = 1.1;
+const ZOOM_OUT_FACTOR = 0.9;
+
 const Playhead: React.FC = () => {
   const currentTime = useStore(state => state.currentTime);
   const zoom = useStore(state => state.zoom);
@@ -94,6 +97,7 @@ export default function App() {
   const [inviteParams, setInviteParams] = React.useState<{ inviteId: string; projectId: string } | null>(null);
   const [showSignInGate, setShowSignInGate] = React.useState(false);
   const [signInEmail, setSignInEmail] = React.useState('');
+  const [signInDisplayName, setSignInDisplayName] = React.useState('');
   const [signInSent, setSignInSent] = React.useState(false);
   const [signInError, setSignInError] = React.useState('');
   const { importFiles } = useFileImport();
@@ -138,6 +142,14 @@ export default function App() {
       } else if (key === 'f' && !forwardInterval.current) {
         state.seek(1); // Immediate seek
         forwardInterval.current = setInterval(() => useStore.getState().seek(0.5), 50);
+      } else if (key === '+' || key === '=') {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        e.preventDefault();
+        state.setZoom((Number(state.zoom) || 100) * ZOOM_IN_FACTOR);
+      } else if (key === '-') {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        e.preventDefault();
+        state.setZoom((Number(state.zoom) || 100) * ZOOM_OUT_FACTOR);
       } else if (key === ' ') {
         e.preventDefault();
         try {
@@ -238,18 +250,20 @@ export default function App() {
   // Zoom and Scroll handlers
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      if (!viewportRef.current) return;
+      const viewport = viewportRef.current;
+      if (!viewport) return;
 
       if (e.ctrlKey || e.metaKey) {
         // Horizontal Move with Ctrl+Scrolling
         e.preventDefault();
-        viewportRef.current.scrollLeft += e.deltaY;
+        viewport.scrollLeft += e.deltaY;
       } else {
         // Zoom with Scrolling
         e.preventDefault();
         const delta = -e.deltaY;
-        const zoomFactor = delta > 0 ? 1.1 : 0.9;
-        setZoom(zoom * zoomFactor);
+        const zoomFactor = delta > 0 ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
+        const currentZoom = Number(useStore.getState().zoom) || 100;
+        useStore.getState().setZoom(currentZoom * zoomFactor);
       }
     };
 
@@ -262,14 +276,14 @@ export default function App() {
         viewport.removeEventListener('wheel', handleWheel);
       }
     };
-  }, [zoom, setZoom]);
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!signInEmail.trim()) return;
     setSignInError('');
     try {
-      await authService.signInMagicLink(signInEmail.trim());
+      await authService.signInMagicLink(signInEmail.trim(), signInDisplayName.trim() || undefined);
       setSignInSent(true);
     } catch (err: any) {
       setSignInError(err.message || 'Failed to send sign-in link');
@@ -312,6 +326,13 @@ export default function App() {
                 onChange={e => setSignInEmail(e.target.value)}
                 placeholder="your@email.com"
                 required
+                className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)]"
+              />
+              <input
+                type="text"
+                value={signInDisplayName}
+                onChange={e => setSignInDisplayName(e.target.value)}
+                placeholder="Display name (shown to collaborators)"
                 className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)]"
               />
               {signInError && <p className="text-xs text-red-400">{signInError}</p>}
