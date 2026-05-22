@@ -23,7 +23,7 @@ export const CommandTerminal: React.FC = () => {
   const [historyDraft, setHistoryDraft] = useState('');
   const [showHelp, setShowHelp] = useState(false);
   const [lines, setLines] = useState<TerminalLine[]>([
-    { id: makeLineId(), text: 'Ready. Commands: add track, rm track, rm c, sel, go, ff, rw, s, m, vu, vd, c: "comment", invite, e, e stem, +, -, ++, --', tone: 'info' }
+    { id: makeLineId(), text: 'Ready. Commands: add track, rm track, rm c, sel, go, ff, rw, s, m, vu, vd, c: "comment", invite, e, e stem, punchin, +, -, ++, --', tone: 'info' }
   ]);
 
   const helpLines = [
@@ -43,6 +43,7 @@ export const CommandTerminal: React.FC = () => {
     'invite <email>      invite collaborator to current project',
     'e                   export full mixdown',
     'e stem              export between markers 1 and 2',
+    'punchin             import audio file at current playhead position',
     '+, ++, +++          zoom in 1/2/3 steps',
     '-, --, ---          zoom out 1/2/3 steps',
   ];

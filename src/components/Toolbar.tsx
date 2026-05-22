@@ -1,7 +1,7 @@
 import React from 'react';
-import { 
+import {
   Play, Pause, SkipBack, SkipForward,
-  Magnet, Download, 
+  Magnet, Download,
   Plus, ZoomIn, ZoomOut,
   Undo, Redo, Target, FolderOpen,
   MousePointer2, Scissors, VolumeX,
@@ -10,7 +10,8 @@ import {
   LayoutDashboard,
   Rewind,
   FastForward,
-  Flag
+  Flag,
+  Mic
 } from 'lucide-react';
 import { useStore } from '../store';
 import { exportMixdown } from '../lib/exportUtils';
@@ -19,6 +20,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { ProjectMenu } from './ProjectMenu';
 import { AnimatePresence } from 'motion/react';
 import { storageService } from '../services/storage';
+import { registerPunchInTrigger } from '../lib/commandActions';
 
 interface ToolbarProps {
   onToggleCollaboration?: () => void;
@@ -62,6 +64,8 @@ const PlayheadCounter: React.FC = () => {
 
 export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isCollaborationOpen }) => {
   const { importFiles } = useFileImport();
+  const punchIn = useStore(state => state.punchIn);
+  const punchInRef = useRef<HTMLInputElement>(null);
   const isPlaying = useStore(state => state.isPlaying);
   const setIsPlaying = useStore(state => state.setIsPlaying);
   const timelineMode = useStore(state => state.timelineMode);
@@ -179,6 +183,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo, handleQuickSave]);
 
+  useEffect(() => {
+    registerPunchInTrigger(() => punchInRef.current?.click());
+    return () => registerPunchInTrigger(() => {});
+  }, []);
+
+  const handlePunchIn = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      punchIn(file);
+      e.target.value = '';
+    }
+  };
+
   const handleExport = () => {
     if (markers[1] !== null && markers[2] !== null) {
       setShowExportOptions(true);
@@ -263,7 +280,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
             <Save size={16} />
           </button>
           <div className="w-[1px] h-4 bg-white/10 mx-1" />
-          <button 
+          <input
+            ref={punchInRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={handlePunchIn}
+            aria-label="Punch in audio file"
+          />
+          <button
+            onClick={() => punchInRef.current?.click()}
+            className="flex items-center gap-1.5 px-2 py-1 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded text-[10px] font-black uppercase tracking-widest"
+            title="Punch In — import audio at playhead (punchin)"
+          >
+            <Mic size={14} /> Punch
+          </button>
+          <button
             onClick={() => importFiles()}
             className="flex items-center gap-1.5 px-2 py-1 hover:bg-white/10 text-white rounded text-[10px] font-black uppercase tracking-widest"
             title="Import Stems (I)"
