@@ -22,12 +22,14 @@ import { format } from 'date-fns';
 import { MembersPanel } from './MembersPanel';
 
 export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { 
-    comments, 
-    tracks, 
-    toggleResolveComment, 
+  const {
+    comments,
+    tracks,
+    toggleResolveComment,
+    setCommentStatus,
     removeComment,
     setCurrentTime,
+    setSelectedTrackId,
     currentTime,
     currentUser
   } = useStore();
@@ -64,8 +66,8 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
   };
 
   const filteredComments = comments.filter(c => {
-    const matchesFilter = filter === 'all' || (filter === 'open' ? !c.isResolved : c.isResolved);
-    const matchesSearch = c.text.toLowerCase().includes(search.toLowerCase()) || 
+    const matchesFilter = filter === 'all' || (filter === 'open' ? c.status !== 'approved' : c.status === 'approved');
+    const matchesSearch = c.text.toLowerCase().includes(search.toLowerCase()) ||
                          c.userName.toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;
   }).sort((a, b) => b.createdAt - a.createdAt);
@@ -74,7 +76,21 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
     return tracks.find(t => t.id === trackId)?.name || 'Unknown Track';
   };
 
-  const openCount = comments.filter(c => !c.isResolved).length;
+  const openCount = comments.filter(c => c.status !== 'approved').length;
+
+  const STATUS_LABELS: Record<string, string> = {
+    open: 'Open',
+    in_progress: 'In Progress',
+    needs_review: 'Needs Review',
+    approved: 'Approved',
+  };
+
+  const STATUS_COLORS: Record<string, string> = {
+    open: 'text-white/50 bg-white/10',
+    in_progress: 'text-amber-400 bg-amber-400/10',
+    needs_review: 'text-blue-400 bg-blue-400/10',
+    approved: 'text-emerald-500 bg-emerald-500/10',
+  };
 
   const getUserColor = (userId: string) => {
     const colors = [
@@ -187,7 +203,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
           <div className="bg-white/[0.03] p-3 rounded-xl border border-white/5">
             <div className="text-[8px] text-white/30 font-black uppercase tracking-widest mb-1">Health</div>
             <div className="text-[11px] font-black text-white">
-              {comments.length > 0 ? Math.round((comments.filter(c => c.isResolved).length / comments.length) * 100) : 100}%
+              {comments.length > 0 ? Math.round((comments.filter(c => c.status === 'approved').length / comments.length) * 100) : 100}%
             </div>
           </div>
         </div>
@@ -326,29 +342,29 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
             className="space-y-4"
           >
             {filteredComments.map((comment) => (
-              <motion.div 
+              <motion.div
                 variants={item}
                 key={comment.id}
                 className={`group relative p-4 rounded-xl border transition-all duration-300 ${
-                  comment.isResolved 
-                    ? 'bg-white/[0.02] border-white/5 opacity-50 grayscale select-none' 
+                  comment.status === 'approved'
+                    ? 'bg-white/[0.02] border-white/5 opacity-50 grayscale select-none'
                     : 'bg-white/[0.03] border-white/10 hover:border-[var(--color-accent)]/40 hover:bg-white/[0.05] shadow-sm'
                 }`}
               >
                 <div className="flex gap-4">
                   <div className="flex flex-col items-center gap-2 pt-0.5">
-                    <button 
+                    <button
                       onClick={() => toggleResolveComment(comment.id)}
                       className={`shrink-0 transition-all transform hover:scale-110 ${
-                        comment.isResolved 
-                          ? 'text-emerald-500' 
+                        comment.status === 'approved'
+                          ? 'text-emerald-500'
                           : 'text-white/20 hover:text-[var(--color-accent)]'
                       }`}
-                      title={comment.isResolved ? "Unresolve" : "Resolve note"}
+                      title={comment.status === 'approved' ? 'Reopen' : 'Mark approved'}
                     >
-                      {comment.isResolved ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                      {comment.status === 'approved' ? <CheckCircle2 size={18} /> : <Circle size={18} />}
                     </button>
-                    {!comment.isResolved && (
+                    {comment.status !== 'approved' && (
                       <div className="w-[1px] flex-1 bg-white/[0.05]" />
                     )}
                   </div>
@@ -360,22 +376,31 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                           <MessageSquare size={10} />
                           {getTrackName(comment.trackId)}
                         </span>
-                        {comment.isResolved && (
-                           <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-widest px-1.5 py-0.5 bg-emerald-500/10 rounded">
-                             Done
-                           </span>
-                        )}
+                        <select
+                          value={comment.status}
+                          onChange={(e) => setCommentStatus(comment.id, e.target.value as any)}
+                          onClick={(e) => e.stopPropagation()}
+                          className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border-0 outline-none cursor-pointer ${STATUS_COLORS[comment.status] || STATUS_COLORS.open}`}
+                          title="Set comment status"
+                          aria-label="Comment status"
+                        >
+                          <option value="open">Open</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="needs_review">Needs Review</option>
+                          <option value="approved">Approved</option>
+                        </select>
                        </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <button 
-                          onClick={() => setCurrentTime(comment.timestamp)}
+                        <button
+                          onClick={() => { setCurrentTime(comment.timestamp); setSelectedTrackId(comment.trackId); }}
                           className="flex items-center gap-1 text-[9px] bg-white/10 px-2 py-0.5 rounded-full font-mono font-bold text-white/50 hover:bg-[var(--color-accent)] hover:text-black hover:scale-105 active:scale-95 transition-all"
+                          title="Jump to this comment on the timeline"
                         >
                           <Clock size={10} />
                           {Math.floor(comment.timestamp / 60)}:{(comment.timestamp % 60).toFixed(1).padStart(4, '0')}
                         </button>
-                        {!comment.isResolved && (
-                          <button 
+                        {comment.status !== 'approved' && (
+                          <button
                             onClick={() => removeComment(comment.id)}
                             className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-500 transition-all rounded hover:bg-rose-500/10"
                           >
@@ -385,7 +410,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                       </div>
                     </div>
 
-                    <p className={`text-[12px] leading-relaxed mb-4 font-medium transition-all ${comment.isResolved ? 'text-white/30 line-through decoration-white/20' : 'text-white/90'}`}>
+                    <p className={`text-[12px] leading-relaxed mb-4 font-medium transition-all ${comment.status === 'approved' ? 'text-white/30 line-through decoration-white/20' : 'text-white/90'}`}>
                       {comment.text}
                     </p>
 
@@ -421,7 +446,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                 </div>
                 
                 {/* Active Indicator Bar */}
-                {Math.abs(currentTime - comment.timestamp) < 0.2 && !comment.isResolved && (
+                {Math.abs(currentTime - comment.timestamp) < 0.2 && comment.status !== 'approved' && (
                   <motion.div 
                     layoutId="active-comment"
                     className="absolute -left-1 top-3 bottom-3 w-1.5 bg-[var(--color-accent)] rounded-full shadow-[0_0_15px_rgba(242,125,38,0.5)] z-20" 

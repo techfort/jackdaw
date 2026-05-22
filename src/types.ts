@@ -1,3 +1,5 @@
+export type CommentStatus = 'open' | 'in_progress' | 'needs_review' | 'approved';
+
 export interface Comment {
   id: string;
   trackId: string;
@@ -5,7 +7,7 @@ export interface Comment {
   text: string;
   userName: string;
   userId: string;
-  isResolved: boolean;
+  status: CommentStatus;
   createdAt: number;
 }
 
@@ -96,6 +98,7 @@ export interface DAWState {
   removeClip: (trackId: string, clipId: string) => void;
   addComment: (trackId: string, timestamp: number, text: string) => string;
   toggleResolveComment: (id: string) => void;
+  setCommentStatus: (id: string, status: CommentStatus) => void;
   removeComment: (id: string) => void;
   setTempo: (tempo: number) => void;
   setTimelineMode: (mode: TimelineMode) => void;
