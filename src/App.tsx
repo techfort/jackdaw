@@ -210,29 +210,25 @@ export default function App() {
   useAudioEngine(); // Initialize audio engine
   usePresenceSync(); // Throttled presence updates
 
-  // Detect invite params in the URL early so sign-in gate can show context
+  // Detect invite params in the URL early — persist to localStorage so onAuthStateChanged
+  // can pick them up regardless of sign-in timing (handles already-signed-in users too)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const inviteId = params.get('invite');
     const projectId = params.get('project');
     if (inviteId && projectId) {
       setUrlInviteContext({ inviteId, projectId });
+      if (!window.localStorage.getItem('pendingInviteId')) {
+        window.localStorage.setItem('pendingInviteId', inviteId);
+        window.localStorage.setItem('pendingProjectId', projectId);
+      }
     }
   }, []);
 
   const completeMagicLink = React.useCallback(async () => {
     try {
-      const user = await (authService as any).completeMagicLinkSignIn();
-      if (user) {
-        // Invite params were saved to localStorage by completeMagicLinkSignIn before URL cleanup
-        const inviteId = window.localStorage.getItem('pendingInviteId');
-        const projectId = window.localStorage.getItem('pendingProjectId');
-        window.localStorage.removeItem('pendingInviteId');
-        window.localStorage.removeItem('pendingProjectId');
-        if (inviteId && projectId) {
-          setInviteParams({ inviteId, projectId });
-        }
-      }
+      await (authService as any).completeMagicLinkSignIn();
+      // Invite params are picked up by onAuthStateChanged when auth state updates
     } catch (err: any) {
       if (err?.message === 'EMAIL_REQUIRED') {
         // URL is a magic link but no email in localStorage — show confirmation form
@@ -250,6 +246,19 @@ export default function App() {
       useStore.getState().setCurrentUser(user);
       if (storageMode === 'firebase') {
         setShowSignInGate(!user);
+        if (user) {
+          // Collect invite params from localStorage (saved by URL detection or completeMagicLinkSignIn)
+          // Fallback to URL directly in case onAuthStateChanged fires before the URL useEffect
+          const pendingInviteId = window.localStorage.getItem('pendingInviteId')
+            || new URLSearchParams(window.location.search).get('invite');
+          const pendingProjectId = window.localStorage.getItem('pendingProjectId')
+            || new URLSearchParams(window.location.search).get('project');
+          if (pendingInviteId && pendingProjectId) {
+            window.localStorage.removeItem('pendingInviteId');
+            window.localStorage.removeItem('pendingProjectId');
+            setInviteParams({ inviteId: pendingInviteId, projectId: pendingProjectId });
+          }
+        }
       }
     });
 
