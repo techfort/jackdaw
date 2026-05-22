@@ -11,23 +11,28 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
+    // The app keys user documents by email when available, falling back to UID.
+    // getUserKey() in FirebaseStorage.ts: auth.currentUser.email || auth.currentUser.uid
+    function currentUserKey() {
+      return request.auth.token.email != null
+        ? request.auth.token.email
+        : request.auth.uid;
+    }
+
     function isMember(projectId) {
       return isAuthenticated() &&
-        exists(/databases/$(database)/documents/projects/$(projectId)/members/$(currentUserId()));
+        exists(/databases/$(database)/documents/projects/$(projectId)/members/$(currentUserKey()));
     }
 
     function isOwner(projectId) {
       return isAuthenticated() &&
-        get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == currentUserId();
+        get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == currentUserKey();
     }
 
     function canEdit(projectId) {
       return isMember(projectId) &&
-        get(/databases/$(database)/documents/projects/$(projectId)/members/$(currentUserId())).data.role in ['owner', 'editor'];
-    }
-
-    function validStatus(status) {
-      return status in ['open', 'in_progress', 'needs_review', 'approved'];
+        get(/databases/$(database)/documents/projects/$(projectId)/members/$(currentUserKey())).data.role
+          in ['owner', 'editor'];
     }
 
     function validSongData(data) {
@@ -39,9 +44,11 @@ service cloud.firestore {
     }
 
     // User profiles — any authenticated user can read; users own their profile
+    // doc keyed by email (or uid as fallback)
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && currentUserId() == userId;
+      allow write: if isAuthenticated() &&
+        (currentUserId() == userId || currentUserKey() == userId);
     }
 
     // Projects
@@ -51,45 +58,43 @@ service cloud.firestore {
       allow update: if isOwner(projectId);
       allow delete: if isOwner(projectId);
 
-      // Project members
+      // Project members — keyed by email (or uid as fallback)
       match /members/{memberId} {
         allow read: if isMember(projectId);
         // Owner manages members; invited users can write their own membership doc on accept
         allow create: if isOwner(projectId) ||
-          (isAuthenticated() && currentUserId() == memberId);
+          (isAuthenticated() && (currentUserId() == memberId || currentUserKey() == memberId));
         allow update: if isOwner(projectId);
-        // Owners can remove anyone except themselves; members can remove themselves
-        allow delete: if (isOwner(projectId) && memberId != currentUserId()) ||
-          (isAuthenticated() && currentUserId() == memberId && !isOwner(projectId));
+        // Owners can remove others; members can remove themselves
+        allow delete: if (isOwner(projectId) && memberId != currentUserKey()) ||
+          (isAuthenticated() && (currentUserId() == memberId || currentUserKey() == memberId) && !isOwner(projectId));
       }
 
-      // Songs — editors and owners can write; viewers can only read
+      // Songs
       match /songs/{songId} {
         allow read: if isMember(projectId);
         allow create: if canEdit(projectId) && validSongData(request.resource.data);
         allow update: if canEdit(projectId) &&
                          validSongData(request.resource.data) &&
-                         // Monotonically increasing updatedAt prevents writing stale data
                          request.resource.data.updatedAt >= resource.data.updatedAt;
+        allow delete: if isOwner(projectId);
+      }
+
+      // Invites — owner writes; any authenticated user can read to accept
+      match /invites/{inviteId} {
+        allow read: if isAuthenticated();
+        allow create: if isOwner(projectId);
+        allow update: if isAuthenticated() &&
+          (resource.data.email == request.auth.token.email || isOwner(projectId));
         allow delete: if isOwner(projectId);
       }
     }
 
-    // Invite tokens — owner writes; authenticated users can read to accept
-    match /invites/{inviteId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() &&
-        (resource.data.email == request.auth.token.email ||
-         isOwner(resource.data.projectId));
-      allow delete: if isOwner(resource.data.projectId);
-    }
-
-    // Per-user project mirrors for fast listing
+    // Per-user project mirrors for fast listing — keyed by email or uid
     match /userProjects/{userId} {
       match /projects/{projectId} {
-        allow read: if isAuthenticated() && currentUserId() == userId;
-        allow write: if isAuthenticated() && currentUserId() == userId;
+        allow read, write: if isAuthenticated() &&
+          (currentUserId() == userId || currentUserKey() == userId);
       }
     }
   }
