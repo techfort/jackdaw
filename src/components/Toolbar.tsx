@@ -11,7 +11,8 @@ import {
   Rewind,
   FastForward,
   Flag,
-  Mic
+  Mic,
+  LogOut
 } from 'lucide-react';
 import { useStore } from '../store';
 import { exportMixdown } from '../lib/exportUtils';
@@ -19,7 +20,7 @@ import { useFileImport } from '../hooks/useFileImport';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ProjectMenu } from './ProjectMenu';
 import { AnimatePresence } from 'motion/react';
-import { storageService } from '../services/storage';
+import { authService, storageMode, storageService } from '../services/storage';
 import { registerPunchInTrigger } from '../lib/commandActions';
 
 interface ToolbarProps {
@@ -98,6 +99,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const goToStart = useStore(state => state.goToStart);
   const goToEnd = useStore(state => state.goToEnd);
   const seek = useStore(state => state.seek);
+  const currentUser = useStore(state => state.currentUser);
   const [showProjects, setShowProjects] = useState(false);
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -415,6 +417,27 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           <button onClick={() => setZoom(zoom * 0.8)} className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomOut size={16} /></button>
           <button onClick={() => setZoom(zoom * 1.2)} className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomIn size={16} /></button>
         </div>
+
+        {storageMode === 'firebase' && currentUser && !currentUser.isAnonymous && (
+          <div className="flex items-center gap-1.5 border-l border-white/10 pl-2 ml-1">
+            <div className="w-6 h-6 rounded-md bg-[var(--color-accent)]/20 flex items-center justify-center shrink-0">
+              <span className="text-[9px] font-black text-[var(--color-accent)] uppercase">
+                {(currentUser.name || '?').charAt(0)}
+              </span>
+            </div>
+            <span className="text-[9px] text-white/40 font-bold truncate max-w-[72px] hidden lg:block">
+              {currentUser.name}
+            </span>
+            <button
+              onClick={() => authService.signOut()}
+              className="p-1.5 text-white/30 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/60"
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       <AnimatePresence>
