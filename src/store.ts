@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import React, { useMemo } from 'react';
 import { getSharedAudioContext } from './lib/sharedAudioContext';
 import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus } from './types';
+import { ConcurrentUpdateError } from './services/storage/types';
 import { storageService, authService } from './services/storage';
 
 
@@ -188,10 +189,11 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     pushUpdate: async () => {
-      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo } = get();
+      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo, lastRemoteUpdate } = get();
       if (!isSyncing || !currentProjectId || !currentSongId) return;
 
       const now = Date.now();
+      const baseUpdatedAt = lastRemoteUpdate;
       set({ lastRemoteUpdate: now });
 
       try {
@@ -201,10 +203,17 @@ export const useStore = create<DAWState>((set, get) => {
           // Pass audioData so FirebaseStorage can upload it; saveSong strips it before Firestore write.
           // LocalStorage handles audioData separately via its own IDB store.
           tracks: tracks.map(({ buffer, ...rest }) => rest),
-          updatedAt: now
+          updatedAt: now,
+          baseUpdatedAt
         });
       } catch (err) {
-        console.error("Failed to push update", err);
+        if (err instanceof ConcurrentUpdateError) {
+          // Another client wrote since our last sync — revert our timestamp and let syncSong pull
+          set({ lastRemoteUpdate: baseUpdatedAt ?? 0 });
+          console.warn('Sync conflict detected — refreshing from server');
+        } else {
+          console.error("Failed to push update", err);
+        }
       }
     },
 

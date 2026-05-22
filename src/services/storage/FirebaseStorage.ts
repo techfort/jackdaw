@@ -8,11 +8,12 @@ import {
   where,
   deleteDoc,
   getDoc,
-  getDocs
+  getDocs,
+  runTransaction
 } from 'firebase/firestore';
 import { sendSignInLinkToEmail } from 'firebase/auth';
 import { db, auth, OperationType, handleFirestoreError } from '../firebaseService';
-import { StorageService, SongData, Presence, Project, Member, Invite, Role } from './types';
+import { StorageService, SongData, Presence, Project, Member, Invite, Role, ConcurrentUpdateError } from './types';
 import { createAudioStorage } from '../audioStorage';
 
 const generateId = () =>
@@ -117,14 +118,28 @@ export class FirebaseStorageService implements StorageService {
       );
 
       // Strip non-serialisable fields before writing to Firestore
+      const { baseUpdatedAt, ...dataWithoutBase } = data as any;
       const firestoreTracks = tracksWithPaths.map(({ buffer, audioData, ...rest }: any) => rest);
+      const songRef = doc(db, 'projects', projectId, 'songs', songId);
+      const payload = { ...dataWithoutBase, tracks: firestoreTracks, updatedAt: Date.now() };
 
-      await setDoc(doc(db, 'projects', projectId, 'songs', songId), {
-        ...data,
-        tracks: firestoreTracks,
-        updatedAt: Date.now()
-      }, { merge: true });
+      if (typeof baseUpdatedAt === 'number') {
+        // Optimistic concurrency: reject if server has been updated since our last sync
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(songRef);
+          if (snap.exists()) {
+            const serverUpdatedAt: number = snap.data().updatedAt ?? 0;
+            if (serverUpdatedAt > baseUpdatedAt) {
+              throw new ConcurrentUpdateError(serverUpdatedAt);
+            }
+          }
+          tx.set(songRef, payload, { merge: true });
+        });
+      } else {
+        await setDoc(songRef, payload, { merge: true });
+      }
     } catch (err) {
+      if (err instanceof ConcurrentUpdateError) throw err;
       handleFirestoreError(err, OperationType.WRITE, `projects/${projectId}/songs/${songId}`);
     }
   }

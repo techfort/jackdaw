@@ -290,8 +290,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           />
           <button
             onClick={() => punchInRef.current?.click()}
-            className="flex items-center gap-1.5 px-2 py-1 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded text-[10px] font-black uppercase tracking-widest"
+            className="flex items-center gap-1.5 px-2 py-1 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded text-[10px] font-black uppercase tracking-widest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
             title="Punch In — import audio at playhead (punchin)"
+            aria-label="Punch in: import audio file at current playhead position"
           >
             <Mic size={14} /> Punch
           </button>
