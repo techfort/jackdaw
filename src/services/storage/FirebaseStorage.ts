@@ -221,7 +221,8 @@ export class FirebaseStorageService implements StorageService {
       const snap = await getDoc(doc(db, 'projects', id));
       if (!snap.exists()) return null;
       return this.hydrateProjectOwnerName(snap.data() as Project);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.code === 'permission-denied') return null;
       handleFirestoreError(err, OperationType.GET, `projects/${id}`);
       return null;
     }
