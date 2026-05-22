@@ -355,12 +355,13 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                   <div className="flex flex-col items-center gap-2 pt-0.5">
                     <button
                       onClick={() => toggleResolveComment(comment.id)}
-                      className={`shrink-0 transition-all transform hover:scale-110 ${
+                      className={`shrink-0 transition-all transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 rounded ${
                         comment.status === 'approved'
                           ? 'text-emerald-500'
                           : 'text-white/20 hover:text-[var(--color-accent)]'
                       }`}
                       title={comment.status === 'approved' ? 'Reopen' : 'Mark approved'}
+                      aria-label={comment.status === 'approved' ? `Reopen comment #${comment.id}` : `Mark comment #${comment.id} as approved`}
                     >
                       {comment.status === 'approved' ? <CheckCircle2 size={18} /> : <Circle size={18} />}
                     </button>
@@ -393,8 +394,9 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           onClick={() => { setCurrentTime(comment.timestamp); setSelectedTrackId(comment.trackId); }}
-                          className="flex items-center gap-1 text-[9px] bg-white/10 px-2 py-0.5 rounded-full font-mono font-bold text-white/50 hover:bg-[var(--color-accent)] hover:text-black hover:scale-105 active:scale-95 transition-all"
+                          className="flex items-center gap-1 text-[9px] bg-white/10 px-2 py-0.5 rounded-full font-mono font-bold text-white/50 hover:bg-[var(--color-accent)] hover:text-black hover:scale-105 active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/60"
                           title="Jump to this comment on the timeline"
+                          aria-label={`Jump to comment at ${Math.floor(comment.timestamp / 60)}:${(comment.timestamp % 60).toFixed(1).padStart(4, '0')} on track ${getTrackName(comment.trackId)}`}
                         >
                           <Clock size={10} />
                           {Math.floor(comment.timestamp / 60)}:{(comment.timestamp % 60).toFixed(1).padStart(4, '0')}

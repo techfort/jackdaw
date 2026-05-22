@@ -3,17 +3,94 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
-    match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2026, 6, 18);
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function currentUserId() {
+      return request.auth.uid;
+    }
+
+    function isMember(projectId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/projects/$(projectId)/members/$(currentUserId()));
+    }
+
+    function isOwner(projectId) {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == currentUserId();
+    }
+
+    function canEdit(projectId) {
+      return isMember(projectId) &&
+        get(/databases/$(database)/documents/projects/$(projectId)/members/$(currentUserId())).data.role in ['owner', 'editor'];
+    }
+
+    function validStatus(status) {
+      return status in ['open', 'in_progress', 'needs_review', 'approved'];
+    }
+
+    function validSongData(data) {
+      return data.keys().hasAll(['name', 'tracks', 'comments', 'tempo', 'updatedAt']) &&
+             data.tempo is number &&
+             data.updatedAt is number &&
+             data.tracks is list &&
+             data.comments is list;
+    }
+
+    // User profiles — any authenticated user can read; users own their profile
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && currentUserId() == userId;
+    }
+
+    // Projects
+    match /projects/{projectId} {
+      allow read: if isMember(projectId);
+      allow create: if isAuthenticated();
+      allow update: if isOwner(projectId);
+      allow delete: if isOwner(projectId);
+
+      // Project members
+      match /members/{memberId} {
+        allow read: if isMember(projectId);
+        // Owner manages members; invited users can write their own membership doc on accept
+        allow create: if isOwner(projectId) ||
+          (isAuthenticated() && currentUserId() == memberId);
+        allow update: if isOwner(projectId);
+        // Owners can remove anyone except themselves; members can remove themselves
+        allow delete: if (isOwner(projectId) && memberId != currentUserId()) ||
+          (isAuthenticated() && currentUserId() == memberId && !isOwner(projectId));
+      }
+
+      // Songs — editors and owners can write; viewers can only read
+      match /songs/{songId} {
+        allow read: if isMember(projectId);
+        allow create: if canEdit(projectId) && validSongData(request.resource.data);
+        allow update: if canEdit(projectId) &&
+                         validSongData(request.resource.data) &&
+                         // Monotonically increasing updatedAt prevents writing stale data
+                         request.resource.data.updatedAt >= resource.data.updatedAt;
+        allow delete: if isOwner(projectId);
+      }
+    }
+
+    // Invite tokens — owner writes; authenticated users can read to accept
+    match /invites/{inviteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() &&
+        (resource.data.email == request.auth.token.email ||
+         isOwner(resource.data.projectId));
+      allow delete: if isOwner(resource.data.projectId);
+    }
+
+    // Per-user project mirrors for fast listing
+    match /userProjects/{userId} {
+      match /projects/{projectId} {
+        allow read: if isAuthenticated() && currentUserId() == userId;
+        allow write: if isAuthenticated() && currentUserId() == userId;
+      }
     }
   }
 }

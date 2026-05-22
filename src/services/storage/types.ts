@@ -15,6 +15,15 @@ export interface SongData {
   comments: Comment[];
   tempo: number;
   updatedAt: number;
+  /** Expected current server updatedAt — if set and mismatches, saveSong rejects with ConcurrentUpdateError */
+  baseUpdatedAt?: number;
+}
+
+export class ConcurrentUpdateError extends Error {
+  constructor(public serverUpdatedAt: number) {
+    super('Concurrent update detected: another client modified this song.');
+    this.name = 'ConcurrentUpdateError';
+  }
 }
 
 export interface Presence {
