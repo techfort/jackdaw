@@ -56,7 +56,14 @@ export class FirebaseAuthService implements AuthService {
   }
 
   async signInMagicLink(email: string, displayName?: string): Promise<void> {
-    const callbackUrl = window.location.href.split('?')[0]; // strip existing params
+    // Preserve any invite params so they survive the magic link round-trip
+    const params = new URLSearchParams(window.location.search);
+    const inviteId = params.get('invite');
+    const projectId = params.get('project');
+    let callbackUrl = window.location.origin + window.location.pathname;
+    if (inviteId && projectId) {
+      callbackUrl += `?invite=${encodeURIComponent(inviteId)}&project=${encodeURIComponent(projectId)}`;
+    }
     await sendSignInLinkToEmail(auth, email, {
       url: callbackUrl,
       handleCodeInApp: true
@@ -70,32 +77,40 @@ export class FirebaseAuthService implements AuthService {
   }
 
   async completeMagicLinkSignIn(): Promise<User | null> {
-    if (isSignInWithEmailLink(auth, window.location.href)) {
-      let email = window.localStorage.getItem('emailForSignIn');
-      if (!email) {
-        email = window.prompt('Please provide your email for confirmation');
+    if (!isSignInWithEmailLink(auth, window.location.href)) return null;
+
+    // Capture invite params BEFORE cleaning URL — save to localStorage so App can read them
+    const params = new URLSearchParams(window.location.search);
+    const inviteId = params.get('invite');
+    const projectId = params.get('project');
+    if (inviteId) window.localStorage.setItem('pendingInviteId', inviteId);
+    if (projectId) window.localStorage.setItem('pendingProjectId', projectId);
+
+    const email = window.localStorage.getItem('emailForSignIn');
+    if (!email) {
+      // Signal to App.tsx that we need email confirmation before we can complete
+      throw new Error('EMAIL_REQUIRED');
+    }
+
+    const result = await signInWithEmailLink(auth, email, window.location.href);
+    window.localStorage.removeItem('emailForSignIn');
+    const pendingDisplayName = window.localStorage.getItem('displayNameForSignIn');
+    window.localStorage.removeItem('displayNameForSignIn');
+
+    // Clean magic link from URL (invite params already saved to localStorage above)
+    window.history.replaceState({}, '', window.location.pathname);
+
+    if (result.user) {
+      if (pendingDisplayName) {
+        await firebaseUpdateProfile(result.user, { displayName: pendingDisplayName });
       }
-      if (email) {
-        const result = await signInWithEmailLink(auth, email, window.location.href);
-        window.localStorage.removeItem('emailForSignIn');
-        const pendingDisplayName = window.localStorage.getItem('displayNameForSignIn');
-        window.localStorage.removeItem('displayNameForSignIn');
-        // Clean invite/magic link params from URL without triggering a reload
-        const clean = window.location.pathname;
-        window.history.replaceState({}, '', clean);
-        if (result.user) {
-          if (pendingDisplayName) {
-            await firebaseUpdateProfile(result.user, { displayName: pendingDisplayName });
-          }
-          await ensureUserProfile(result.user);
-          return {
-            id: result.user.email || result.user.uid,
-            name: result.user.displayName || pendingDisplayName || email.split('@')[0],
-            email: result.user.email || undefined,
-            isAnonymous: result.user.isAnonymous
-          };
-        }
-      }
+      await ensureUserProfile(result.user);
+      return {
+        id: result.user.email || result.user.uid,
+        name: result.user.displayName || pendingDisplayName || email.split('@')[0],
+        email: result.user.email || undefined,
+        isAnonymous: result.user.isAnonymous
+      };
     }
     return null;
   }

@@ -100,6 +100,12 @@ export default function App() {
   const [signInDisplayName, setSignInDisplayName] = React.useState('');
   const [signInSent, setSignInSent] = React.useState(false);
   const [signInError, setSignInError] = React.useState('');
+  // true when URL contains a magic link but no email in localStorage — need email confirmation
+  const [isMagicLinkPending, setIsMagicLinkPending] = React.useState(false);
+  // invite params detected in URL before auth (so sign-in gate can show context)
+  const [urlInviteContext, setUrlInviteContext] = React.useState<{ inviteId: string; projectId: string } | null>(null);
+  // increment to force ProjectDashboard to re-fetch after invite acceptance
+  const [dashboardRefreshKey, setDashboardRefreshKey] = React.useState(0);
   const { importFiles } = useFileImport();
 
   const projectDuration = useProjectDuration();
@@ -204,6 +210,40 @@ export default function App() {
   useAudioEngine(); // Initialize audio engine
   usePresenceSync(); // Throttled presence updates
 
+  // Detect invite params in the URL early so sign-in gate can show context
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const inviteId = params.get('invite');
+    const projectId = params.get('project');
+    if (inviteId && projectId) {
+      setUrlInviteContext({ inviteId, projectId });
+    }
+  }, []);
+
+  const completeMagicLink = React.useCallback(async () => {
+    try {
+      const user = await (authService as any).completeMagicLinkSignIn();
+      if (user) {
+        // Invite params were saved to localStorage by completeMagicLinkSignIn before URL cleanup
+        const inviteId = window.localStorage.getItem('pendingInviteId');
+        const projectId = window.localStorage.getItem('pendingProjectId');
+        window.localStorage.removeItem('pendingInviteId');
+        window.localStorage.removeItem('pendingProjectId');
+        if (inviteId && projectId) {
+          setInviteParams({ inviteId, projectId });
+        }
+      }
+    } catch (err: any) {
+      if (err?.message === 'EMAIL_REQUIRED') {
+        // URL is a magic link but no email in localStorage — show confirmation form
+        setIsMagicLinkPending(true);
+        setShowSignInGate(true);
+      } else {
+        console.error(err);
+      }
+    }
+  }, []);
+
   // Auth Initialization
   useEffect(() => {
     const unsubscribe = authService.onAuthStateChanged((user) => {
@@ -214,19 +254,7 @@ export default function App() {
     });
 
     if ((authService as any).completeMagicLinkSignIn) {
-      // Firebase mode: complete any in-progress magic link sign-in
-      (authService as any).completeMagicLinkSignIn()
-        .then((user: any) => {
-          if (user) {
-            const params = new URLSearchParams(window.location.search);
-            const inviteId = params.get('invite');
-            const projectId = params.get('project');
-            if (inviteId && projectId) {
-              setInviteParams({ inviteId, projectId });
-            }
-          }
-        })
-        .catch(console.error);
+      completeMagicLink();
     } else {
       // Local mode: auto-sign in anonymously if no user
       if (!authService.getCurrentUser()) {
@@ -235,7 +263,7 @@ export default function App() {
     }
 
     return () => unsubscribe();
-  }, []);
+  }, [completeMagicLink]);
 
   // Handle Sync side-effects — watches both projectId and songId
   useEffect(() => {
@@ -281,9 +309,23 @@ export default function App() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!signInEmail.trim()) return;
+    if (!signInDisplayName.trim()) {
+      setSignInError('Display name is required.');
+      return;
+    }
     setSignInError('');
+
+    if (isMagicLinkPending) {
+      // User is confirming their email to complete a pending magic link sign-in
+      window.localStorage.setItem('emailForSignIn', signInEmail.trim());
+      window.localStorage.setItem('displayNameForSignIn', signInDisplayName.trim());
+      setIsMagicLinkPending(false);
+      await completeMagicLink();
+      return;
+    }
+
     try {
-      await authService.signInMagicLink(signInEmail.trim(), signInDisplayName.trim() || undefined);
+      await authService.signInMagicLink(signInEmail.trim(), signInDisplayName.trim());
       setSignInSent(true);
     } catch (err: any) {
       setSignInError(err.message || 'Failed to send sign-in link');
@@ -293,13 +335,16 @@ export default function App() {
   if (!showSignInGate && !currentSongIdForRender) {
     return (
       <>
-        <ProjectDashboard />
+        <ProjectDashboard key={dashboardRefreshKey} />
         <AnimatePresence>
           {inviteParams && (
             <InviteAccept
               inviteId={inviteParams.inviteId}
               projectId={inviteParams.projectId}
-              onAccepted={() => setInviteParams(null)}
+              onAccepted={() => {
+                setInviteParams(null);
+                setDashboardRefreshKey(k => k + 1);
+              }}
               onDismiss={() => setInviteParams(null)}
             />
           )}
@@ -313,34 +358,52 @@ export default function App() {
       <div className="h-screen flex items-center justify-center bg-[var(--color-bg-deep)] text-[#adbac7]">
         <div className="w-full max-w-sm p-8 bg-[var(--color-bg-sidebar)] border border-[var(--color-border-main)] rounded-xl shadow-2xl">
           <h1 className="text-xl font-black uppercase tracking-widest mb-1 text-white">JackDAW</h1>
-          <p className="text-xs text-[var(--color-text-muted)] mb-8">Sign in to collaborate</p>
+          <p className="text-xs text-[var(--color-text-muted)] mb-6">
+            {isMagicLinkPending ? 'Confirm your email to complete sign-in' : 'Sign in to collaborate'}
+          </p>
+
+          {urlInviteContext && !signInSent && (
+            <div className="mb-5 p-3 bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 rounded-lg">
+              <p className="text-xs text-[var(--color-accent)] font-bold leading-relaxed">
+                You have a pending invitation. Sign in to accept it and join the project.
+              </p>
+            </div>
+          )}
+
           {signInSent ? (
             <p className="text-sm text-[var(--color-accent)] font-bold">
               Check your email — a sign-in link is on its way to {signInEmail}.
             </p>
           ) : (
             <form onSubmit={handleSignIn} className="space-y-4">
-              <input
-                type="email"
-                value={signInEmail}
-                onChange={e => setSignInEmail(e.target.value)}
-                placeholder="your@email.com"
-                required
-                className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)]"
-              />
-              <input
-                type="text"
-                value={signInDisplayName}
-                onChange={e => setSignInDisplayName(e.target.value)}
-                placeholder="Display name (shown to collaborators)"
-                className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)]"
-              />
+              <div>
+                <input
+                  type="email"
+                  value={signInEmail}
+                  onChange={e => setSignInEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  required
+                  autoFocus
+                  className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)]"
+                />
+              </div>
+              <div>
+                <input
+                  type="text"
+                  value={signInDisplayName}
+                  onChange={e => setSignInDisplayName(e.target.value)}
+                  placeholder="Display name (required)"
+                  required
+                  className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)]"
+                />
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Shown to your collaborators</p>
+              </div>
               {signInError && <p className="text-xs text-red-400">{signInError}</p>}
               <button
                 type="submit"
                 className="w-full bg-[var(--color-accent)] text-black font-black uppercase tracking-widest text-xs py-2.5 rounded hover:brightness-110 transition-all"
               >
-                Send Sign-in Link
+                {isMagicLinkPending ? 'Complete Sign-in' : 'Send Sign-in Link'}
               </button>
             </form>
           )}
@@ -535,7 +598,10 @@ export default function App() {
           <InviteAccept
             inviteId={inviteParams.inviteId}
             projectId={inviteParams.projectId}
-            onAccepted={() => setInviteParams(null)}
+            onAccepted={() => {
+              setInviteParams(null);
+              setDashboardRefreshKey(k => k + 1);
+            }}
             onDismiss={() => setInviteParams(null)}
           />
         )}
