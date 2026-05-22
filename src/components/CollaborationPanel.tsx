@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
 import { authService, storageMode } from '../services/storage';
+import { parseSegments } from '../lib/mentionUtils';
 import {
   CheckCircle2,
   Circle,
@@ -27,6 +28,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
     tracks,
     toggleResolveComment,
     setCommentStatus,
+    resolveComments,
     removeComment,
     setCurrentTime,
     setSelectedTrackId,
@@ -36,6 +38,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
   const [activeTab, setActiveTab] = useState<'comments' | 'members'>('comments');
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('open');
   const [search, setSearch] = useState('');
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [showIdentityEdit, setShowIdentityEdit] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
@@ -65,12 +68,26 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
     }
   };
 
+  const allTags = [...new Set(comments.flatMap(c => c.tags || []))].sort();
+
   const filteredComments = comments.filter(c => {
     const matchesFilter = filter === 'all' || (filter === 'open' ? c.status !== 'approved' : c.status === 'approved');
-    const matchesSearch = c.text.toLowerCase().includes(search.toLowerCase()) ||
-                         c.userName.toLowerCase().includes(search.toLowerCase());
-    return matchesFilter && matchesSearch;
+    const matchesSearch = !search || c.text.toLowerCase().includes(search.toLowerCase()) ||
+                         c.userName.toLowerCase().includes(search.toLowerCase()) ||
+                         (c.tags || []).some(t => t.includes(search.toLowerCase().replace(/^#/, '')));
+    const matchesTag = !tagFilter || (c.tags || []).includes(tagFilter);
+    return matchesFilter && matchesSearch && matchesTag;
   }).sort((a, b) => b.createdAt - a.createdAt);
+
+  const renderCommentText = (text: string, approved: boolean) => (
+    <p className={`text-[12px] leading-relaxed mb-4 font-medium transition-all ${approved ? 'text-white/30 line-through decoration-white/20' : 'text-white/90'}`}>
+      {parseSegments(text).map((seg, i) => {
+        if (seg.type === 'mention') return <span key={i} className="text-amber-400 font-bold">{seg.value}</span>;
+        if (seg.type === 'tag') return <span key={i} className="text-blue-400 font-bold">{seg.value}</span>;
+        return <span key={i}>{seg.value}</span>;
+      })}
+    </p>
+  );
 
   const getTrackName = (trackId: string) => {
     return tracks.find(t => t.id === trackId)?.name || 'Unknown Track';
@@ -309,8 +326,8 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                 key={f}
                 onClick={() => setFilter(f)}
                 className={`flex-1 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${
-                  filter === f 
-                    ? 'bg-zinc-700 text-white shadow-lg' 
+                  filter === f
+                    ? 'bg-zinc-700 text-white shadow-lg'
                     : 'text-white/30 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -318,6 +335,31 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
               </button>
             ))}
           </div>
+          {allTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {allTags.map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide transition-all border ${
+                    tagFilter === tag
+                      ? 'bg-blue-400/20 border-blue-400/40 text-blue-300'
+                      : 'bg-white/5 border-white/10 text-white/40 hover:text-blue-300 hover:border-blue-400/30'
+                  }`}
+                >
+                  #{tag}
+                </button>
+              ))}
+            </div>
+          )}
+          {filter === 'open' && filteredComments.length > 1 && (
+            <button
+              onClick={() => resolveComments(filteredComments.map(c => c.id))}
+              className="w-full py-1.5 mt-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 hover:bg-emerald-500/20 transition-all"
+            >
+              <CheckCircle2 size={10} /> Resolve all visible ({filteredComments.length})
+            </button>
+          )}
         </div>
         </>)}
       </div>
@@ -412,9 +454,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                       </div>
                     </div>
 
-                    <p className={`text-[12px] leading-relaxed mb-4 font-medium transition-all ${comment.status === 'approved' ? 'text-white/30 line-through decoration-white/20' : 'text-white/90'}`}>
-                      {comment.text}
-                    </p>
+                    {renderCommentText(comment.text, comment.status === 'approved')}
 
                     <div className="flex items-center justify-between mt-auto">
                       <div className="flex items-center gap-2">

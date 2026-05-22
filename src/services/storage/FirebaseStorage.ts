@@ -12,7 +12,7 @@ import {
   runTransaction
 } from 'firebase/firestore';
 import { sendSignInLinkToEmail } from 'firebase/auth';
-import { db, auth, OperationType, handleFirestoreError } from '../firebaseService';
+import { db, auth, OperationType, handleFirestoreError, trackFirestoreRead, trackFirestoreWrite } from '../firebaseService';
 import { StorageService, SongData, Presence, Project, Member, Invite, Role, ConcurrentUpdateError } from './types';
 import { createAudioStorage } from '../audioStorage';
 
@@ -56,6 +56,7 @@ export class FirebaseStorageService implements StorageService {
 
   async getSong(projectId: string, songId: string): Promise<SongData | null> {
     try {
+      trackFirestoreRead(`projects/${projectId}/songs/${songId}`);
       const snap = await getDoc(doc(db, 'projects', projectId, 'songs', songId));
       if (!snap.exists()) return null;
       const song = snap.data() as SongData;
@@ -122,6 +123,7 @@ export class FirebaseStorageService implements StorageService {
       const firestoreTracks = tracksWithPaths.map(({ buffer, audioData, ...rest }: any) => rest);
       const songRef = doc(db, 'projects', projectId, 'songs', songId);
       const payload = { ...dataWithoutBase, tracks: firestoreTracks, updatedAt: Date.now() };
+      trackFirestoreWrite(`projects/${projectId}/songs/${songId}`);
 
       if (typeof baseUpdatedAt === 'number') {
         // Optimistic concurrency: reject if server has been updated since our last sync

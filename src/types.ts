@@ -9,6 +9,8 @@ export interface Comment {
   userId: string;
   status: CommentStatus;
   createdAt: number;
+  mentions?: string[];
+  tags?: string[];
 }
 
 export interface Clip {
@@ -99,6 +101,7 @@ export interface DAWState {
   addComment: (trackId: string, timestamp: number, text: string) => string;
   toggleResolveComment: (id: string) => void;
   setCommentStatus: (id: string, status: CommentStatus) => void;
+  resolveComments: (ids: string[]) => void;
   removeComment: (id: string) => void;
   setTempo: (tempo: number) => void;
   setTimelineMode: (mode: TimelineMode) => void;
