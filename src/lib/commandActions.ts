@@ -3,6 +3,20 @@ import { TrackData } from '../types';
 import { storageService } from '../services/storage';
 import { exportMixdown } from './exportUtils';
 
+let _punchInTrigger: (() => void) | null = null;
+
+export const registerPunchInTrigger = (fn: () => void): void => {
+  _punchInTrigger = fn;
+};
+
+export const triggerPunchIn = (): CommandResult => {
+  if (!_punchInTrigger) {
+    return { ok: false, message: 'Punch-in not available.' };
+  }
+  _punchInTrigger();
+  return { ok: true, message: 'Opening file picker for punch-in...' };
+};
+
 export type CommandResult = {
   ok: boolean;
   message: string;
@@ -482,8 +496,12 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
     return zoomFromTerminalSigns(command);
   }
 
+  if (/^punchin$/i.test(command)) {
+    return triggerPunchIn();
+  }
+
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu, vd, c:, invite, e, e stem, +, -, ++, --',
+    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu, vd, c:, invite, e, e stem, punchin, +, -, ++, --',
   };
 };
