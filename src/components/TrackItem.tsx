@@ -59,6 +59,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const commentDraft = useStore(state => state.commentDraft);
   const setCommentDraft = useStore(state => state.setCommentDraft);
   const selectedTrackId = useStore(state => state.selectedTrackId);
+  const setSelectedTrackId = useStore(state => state.setSelectedTrackId);
   const isSelected = selectedTrackId === track.id;
   const [draftText, setDraftText] = React.useState("");
 
@@ -332,30 +333,30 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
       })}
 
         {trackComments.map((comment) => (
-          <div 
+          <div
             key={comment.id}
-            className={`absolute top-0 h-full w-[2px] z-20 group/marker transition-opacity ${comment.isResolved ? 'bg-green-500/30 opacity-40 hover:opacity-100' : 'bg-[var(--color-playhead)] shadow-[0_0_8px_rgba(242,125,38,0.3)]'}`}
+            className={`absolute top-0 h-full w-[2px] z-20 group/marker transition-opacity ${comment.status === 'approved' ? 'bg-green-500/30 opacity-40 hover:opacity-100' : 'bg-[var(--color-playhead)] shadow-[0_0_8px_rgba(242,125,38,0.3)]'}`}
             style={{ left: (Number(comment.timestamp) || 0) * (Number(zoom) || 100) }}
           >
             {/* Tooltip */}
-            <div className={`absolute top-1/2 -translate-y-1/2 left-2 bg-[var(--color-bg-surface)] border ${comment.isResolved ? 'border-green-500/30' : 'border-[var(--color-border-inner)] shadow-[0_0_30px_rgba(0,0,0,0.5)]'} p-3 rounded-lg opacity-0 group-hover/marker:opacity-100 pointer-events-auto transition-all scale-95 group-hover/marker:scale-100 min-w-[220px] z-30`}>
+            <div className={`absolute top-1/2 -translate-y-1/2 left-2 bg-[var(--color-bg-surface)] border ${comment.status === 'approved' ? 'border-green-500/30' : 'border-[var(--color-border-inner)] shadow-[0_0_30px_rgba(0,0,0,0.5)]'} p-3 rounded-lg opacity-0 group-hover/marker:opacity-100 pointer-events-auto transition-all scale-95 group-hover/marker:scale-100 min-w-[220px] z-30`}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
-                  <div className={`w-4 h-4 rounded-full flex items-center justify-center ${comment.isResolved ? 'bg-green-500/20' : 'bg-[var(--color-accent)]/20'}`}>
-                    <UserIcon size={10} className={comment.isResolved ? 'text-green-500' : 'text-[var(--color-accent)]'} />
+                  <div className={`w-4 h-4 rounded-full flex items-center justify-center ${comment.status === 'approved' ? 'bg-green-500/20' : 'bg-[var(--color-accent)]/20'}`}>
+                    <UserIcon size={10} className={comment.status === 'approved' ? 'text-green-500' : 'text-[var(--color-accent)]'} />
                   </div>
                   <span className="text-[9px] font-black text-[var(--color-text-muted)] font-mono">#{comment.id}</span>
                   <span className="text-[10px] font-black text-white/70 uppercase tracking-tight">{comment.userName || 'Artist'}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button 
+                  <button
                     onClick={(e) => { e.stopPropagation(); toggleResolveComment(comment.id); }}
-                    className={`p-1 rounded hover:bg-white/10 transition-colors ${comment.isResolved ? 'text-green-500' : 'text-white/30 hover:text-green-400'}`}
-                    title={comment.isResolved ? "Unresolve" : "Resolve as complete"}
+                    className={`p-1 rounded hover:bg-white/10 transition-colors ${comment.status === 'approved' ? 'text-green-500' : 'text-white/30 hover:text-green-400'}`}
+                    title={comment.status === 'approved' ? 'Reopen' : 'Mark approved'}
                   >
-                    {comment.isResolved ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+                    {comment.status === 'approved' ? <CheckCircle2 size={14} /> : <Circle size={14} />}
                   </button>
-                  <button 
+                  <button
                     onClick={(e) => { e.stopPropagation(); removeComment(comment.id); }}
                     className="p-1 rounded text-white/10 hover:text-red-400 hover:bg-white/5 transition-colors"
                   >
@@ -363,11 +364,11 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                   </button>
                 </div>
               </div>
-              
-              <p className={`text-[11px] leading-relaxed mb-3 ${comment.isResolved ? 'text-white/40 line-through' : 'text-white font-medium'}`}>
+
+              <p className={`text-[11px] leading-relaxed mb-3 ${comment.status === 'approved' ? 'text-white/40 line-through' : 'text-white font-medium'}`}>
                 {comment.text}
               </p>
-              
+
               <div className="flex justify-between items-center pt-2 border-t border-white/5">
                 <div className="flex items-center gap-1 text-[9px] text-white/30 font-mono">
                   <Clock size={10} />
@@ -380,14 +381,14 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             </div>
 
             {/* Marker Handle */}
-            <button 
+            <button
               onClick={(e) => {
                 e.stopPropagation();
                 toggleResolveComment(comment.id);
               }}
               className={`absolute top-3 -left-3 min-w-6 h-6 px-1 rounded-full border-2 border-black flex items-center justify-center transition-all ${
-                comment.isResolved 
-                  ? 'bg-green-500 text-black hover:scale-110' 
+                comment.status === 'approved'
+                  ? 'bg-green-500 text-black hover:scale-110'
                   : 'bg-[var(--color-playhead)] text-black hover:scale-125'
               }`}
             >

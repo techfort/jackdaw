@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import React, { useMemo } from 'react';
 import { getSharedAudioContext } from './lib/sharedAudioContext';
-import { DAWState, TrackData, TimelineMode, Comment, Clip } from './types';
+import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus } from './types';
 import { storageService, authService } from './services/storage';
 
 
@@ -439,7 +439,7 @@ export const useStore = create<DAWState>((set, get) => {
           text,
           userId,
           userName,
-          isResolved: false,
+          status: 'open' as const,
           createdAt: Date.now()
         }],
         canUndo: true
@@ -451,7 +451,16 @@ export const useStore = create<DAWState>((set, get) => {
     toggleResolveComment: (id) => {
       pushToHistory();
       set((state) => ({
-        comments: state.comments.map(c => c.id === id ? { ...c, isResolved: !c.isResolved } : c),
+        comments: state.comments.map(c => c.id === id ? { ...c, status: c.status === 'approved' ? 'open' : 'approved' } : c),
+        canUndo: true
+      }));
+      get().pushUpdate().catch(err => console.error("Update failed", err));
+    },
+
+    setCommentStatus: (id, status) => {
+      pushToHistory();
+      set((state) => ({
+        comments: state.comments.map(c => c.id === id ? { ...c, status } : c),
         canUndo: true
       }));
       get().pushUpdate().catch(err => console.error("Update failed", err));

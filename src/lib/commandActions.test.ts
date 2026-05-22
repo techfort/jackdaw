@@ -137,7 +137,7 @@ describe('addCommentFromCommand auto track resolution', () => {
           text: 'Need cleanup',
           userId: 'u1',
           userName: 'User',
-          isResolved: false,
+          status: 'open' as const,
           createdAt: Date.now(),
         },
       ],
