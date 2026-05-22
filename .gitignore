@@ -20,4 +20,5 @@ coverage/
 .env.local
 firebase-applet-config.json
 .firebaserc
+.firebase/
 cloudflare-worker/wrangler.toml
