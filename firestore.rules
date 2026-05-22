@@ -93,6 +93,12 @@ service cloud.firestore {
       }
     }
 
+    // Ephemeral presence — users write their own doc, members of the same project can read
+    match /presence/{presenceId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == presenceId;
+    }
+
     // Per-user project mirrors for fast listing — keyed by email or uid
     match /userProjects/{userId} {
       match /projects/{projectId} {
