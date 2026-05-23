@@ -224,12 +224,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
     }
   };
 
+  // Shared class fragments for consistency
+  const iconBtn = (active?: boolean, activeClass = 'bg-[var(--color-accent)] text-black') =>
+    `p-1.5 rounded transition-all ${active ? activeClass : 'hover:bg-white/10 text-[var(--color-text-muted)]'}`;
+  const toggleBtn = (active?: boolean) =>
+    `p-1.5 rounded transition-all ${active ? 'text-[var(--color-accent)]' : 'text-white/20 hover:text-white/40'}`;
+  const textBtn = (active?: boolean, activeClass = 'bg-[var(--color-accent)] text-black shadow-lg shadow-[var(--color-accent)]/20') =>
+    `flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-black uppercase tracking-widest transition-all ${active ? activeClass : 'text-white/40 hover:bg-white/10 hover:text-white'}`;
+  const group = 'flex items-center gap-1 bg-white/5 p-1 rounded border border-white/10';
+  const divider = <div className="w-px h-4 bg-white/10 mx-0.5 shrink-0" />;
+
   return (
-    <div className="h-16 bg-[var(--color-bg-sidebar)] border-b border-[var(--color-border-main)] flex items-center px-4 justify-between shrink-0 select-none gap-2" id="jackdaw-toolbar">
+    <div className="h-14 bg-[var(--color-bg-sidebar)] border-b border-[var(--color-border-main)] flex items-center px-3 justify-between shrink-0 select-none gap-2" id="jackdaw-toolbar">
       {/* 1. PROJECT & FILE */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 mr-2">
-          <div className="relative w-8 h-8 flex items-center justify-center">
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="w-7 h-7 flex items-center justify-center">
             <svg viewBox="0 0 100 100" className="w-full h-full">
               <defs>
                 <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -237,23 +247,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
                   <stop offset="100%" stopColor="var(--color-accent)" />
                 </linearGradient>
               </defs>
-              <path 
-                d="M85,35 C80,30 70,25 60,25 C50,25 40,35 35,45 C30,55 25,60 15,65 C25,75 40,80 55,75 C60,72 65,65 65,55 C65,45 75,40 85,35" 
-                fill="none" 
-                stroke="url(#logoGradient)" 
-                strokeWidth="6" 
+              <path
+                d="M85,35 C80,30 70,25 60,25 C50,25 40,35 35,45 C30,55 25,60 15,65 C25,75 40,80 55,75 C60,72 65,65 65,55 C65,45 75,40 85,35"
+                fill="none"
+                stroke="url(#logoGradient)"
+                strokeWidth="6"
                 strokeLinecap="round"
               />
             </svg>
           </div>
-          <h1 className="text-lg font-black tracking-tighter uppercase text-white hidden 2xl:block">
+          <h1 className="text-base font-black tracking-tighter uppercase text-white hidden 2xl:block">
             Jack<span className="text-[var(--color-accent)]">DAW</span>
           </h1>
         </div>
 
         {/* Breadcrumb: Project / Song */}
         {(currentProjectName || currentSongName) && (
-          <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest max-w-[200px]">
+          <div className="hidden sm:flex items-center gap-1 text-[10px] font-black uppercase tracking-widest max-w-[160px] min-w-0">
             {currentProjectName && (
               <button
                 onClick={clearSong}
@@ -264,7 +274,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
               </button>
             )}
             {currentProjectName && currentSongName && (
-              <span className="text-white/20">/</span>
+              <span className="text-white/20 shrink-0">/</span>
             )}
             {currentSongName && (
               <span className="text-white truncate">{currentSongName}</span>
@@ -272,23 +282,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           </div>
         )}
 
-        <div className="flex items-center gap-1 bg-white/5 p-1 rounded border border-white/10">
+        <div className={group}>
           <button
             onClick={() => setShowProjects(!showProjects)}
-            className={`p-1.5 rounded transition-all ${showProjects ? 'bg-[var(--color-accent)] text-black' : 'hover:bg-white/10 text-[var(--color-text-muted)]'}`}
+            className={iconBtn(showProjects)}
             title="Projects"
           >
-            <FolderOpen size={16} />
+            <FolderOpen size={15} />
           </button>
-          <button 
+          <button
             onClick={handleQuickSave}
             disabled={isSaving || !currentSongId}
             className={`p-1.5 rounded transition-all ${isSaving ? 'animate-pulse text-[var(--color-accent)]' : 'hover:bg-white/10 text-[var(--color-text-muted)] disabled:opacity-20'}`}
-            title="Save Project (Ctrl+S)"
+            title="Save (Ctrl+S)"
           >
-            <Save size={16} />
+            <Save size={15} />
           </button>
-          <div className="w-[1px] h-4 bg-white/10 mx-1" />
+          {divider}
           <input
             ref={punchInRef}
             type="file"
@@ -299,57 +309,58 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           />
           <button
             onClick={() => punchInRef.current?.click()}
-            className="flex items-center gap-1.5 px-2 py-1 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded text-[10px] font-black uppercase tracking-widest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
-            title="Punch In — import audio at playhead (punchin)"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded text-[10px] font-black uppercase tracking-widest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
+            title="Punch In — import at playhead"
             aria-label="Punch in: import audio file at current playhead position"
           >
-            <Mic size={14} /> Punch
+            <Mic size={13} /> Punch
           </button>
           <button
             onClick={() => importFiles()}
-            className="flex items-center gap-1.5 px-2 py-1 hover:bg-white/10 text-white rounded text-[10px] font-black uppercase tracking-widest"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-white/10 text-white rounded text-[10px] font-black uppercase tracking-widest"
             title="Import Stems (I)"
           >
-            <Plus size={14} /> Import
+            <Plus size={13} /> Import
           </button>
-          <button 
+          <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 px-2 py-1 bg-[var(--color-accent)]/20 hover:bg-[var(--color-accent)]/30 text-[var(--color-accent)] rounded text-[10px] font-black uppercase tracking-widest"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--color-accent)]/20 hover:bg-[var(--color-accent)]/30 text-[var(--color-accent)] rounded text-[10px] font-black uppercase tracking-widest"
           >
-            <Download size={14} /> Export
+            <Download size={13} /> Export
           </button>
         </div>
       </div>
 
       {/* 2. TRANSPORT & COUNTER */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-1 bg-white/5 p-1 rounded border border-white/10">
-          <button onClick={goToStart} className="p-1 px-2 hover:bg-white/10 rounded text-[var(--color-text-muted)] transition-colors" title="Start (H)"><SkipBack size={16} /></button>
-          <button onMouseDown={startRewind} onMouseUp={stopRewind} onMouseLeave={stopRewind} className="p-1 px-2 hover:bg-white/10 rounded text-[var(--color-text-muted)] active:text-[var(--color-accent)]" title="Rewind (R)"><Rewind size={16} fill="currentColor" /></button>
-          
-          <button 
+      <div className="flex items-center gap-2 shrink-0">
+        <div className={group}>
+          <button onClick={goToStart} className={toggleBtn()} title="Start (H)"><SkipBack size={15} /></button>
+          <button onMouseDown={startRewind} onMouseUp={stopRewind} onMouseLeave={stopRewind} className={`p-1.5 rounded transition-all text-white/20 hover:text-white/40 active:text-[var(--color-accent)]`} title="Rewind (R)"><Rewind size={15} fill="currentColor" /></button>
+
+          <button
             onClick={() => setIsPlaying(!isPlaying)}
             className={`p-1.5 px-5 rounded transition-all duration-200 ${isPlaying ? 'bg-[var(--color-accent)] text-black shadow-lg shadow-[var(--color-accent)]/20' : 'bg-zinc-700 hover:bg-zinc-600 text-white'}`}
             title="Play/Pause (Space)"
           >
-            {isPlaying ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" className="ml-1" />}
+            {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}
           </button>
 
-          <button onMouseDown={startForward} onMouseUp={stopForward} onMouseLeave={stopForward} className="p-1 px-2 hover:bg-white/10 rounded text-[var(--color-text-muted)] active:text-[var(--color-accent)]" title="Forward (F)"><FastForward size={16} fill="currentColor" /></button>
-          <button onClick={goToEnd} className="p-1 px-2 hover:bg-white/10 rounded text-[var(--color-text-muted)]" title="End (E)"><SkipForward size={16} /></button>
+          <button onMouseDown={startForward} onMouseUp={stopForward} onMouseLeave={stopForward} className={`p-1.5 rounded transition-all text-white/20 hover:text-white/40 active:text-[var(--color-accent)]`} title="Forward (F)"><FastForward size={15} fill="currentColor" /></button>
+          <button onClick={goToEnd} className={toggleBtn()} title="End (E)"><SkipForward size={15} /></button>
         </div>
 
-        <div className="flex items-center bg-black/40 rounded px-4 py-1.5 border border-white/10 min-w-[200px] justify-between shadow-inner">
-          <div className="flex flex-col items-center border-r border-white/10 pr-4">
+        <div className="flex items-center bg-black/40 rounded px-3 py-1.5 border border-white/10 gap-3 shadow-inner">
+          <div className="flex flex-col items-center">
             <span className="text-[8px] text-white/40 uppercase font-black tracking-widest leading-none mb-0.5">Tempo</span>
-            <input 
-              type="number" 
+            <input
+              type="number"
               value={tempo}
               onChange={(e) => setTempo(Number(e.target.value))}
               className="w-10 bg-transparent text-sm font-mono text-[var(--color-accent)] focus:outline-none text-center"
             />
           </div>
-          <div className="flex flex-col items-end pl-4">
+          <div className="w-px h-6 bg-white/10 shrink-0" />
+          <div className="flex flex-col items-end">
             <span className="text-[8px] text-white/40 uppercase font-black tracking-widest leading-none mb-0.5">Position</span>
             <PlayheadCounter />
           </div>
@@ -358,80 +369,47 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
 
       {/* 3. TOOLS & VIEW */}
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1 bg-white/5 p-1 rounded border border-white/10">
-          <button 
-            onClick={() => setTool('select')}
-            className={`p-1.5 rounded transition-all ${activeTool === 'select' ? 'bg-[var(--color-accent)] text-black' : 'hover:bg-white/10 text-[var(--color-text-muted)]'}`}
-            title="Select Tool (V)"
-          ><MousePointer2 size={16} /></button>
-          <button 
-            onClick={() => setTool('scissors')}
-            className={`p-1.5 rounded transition-all ${activeTool === 'scissors' ? 'bg-[var(--color-accent)] text-black' : 'hover:bg-white/10 text-[var(--color-text-muted)]'}`}
-            title="Scissors Tool (S)"
-          ><Scissors size={16} /></button>
-          <button 
-            onClick={() => setTool('mute')}
-            className={`p-1.5 rounded transition-all ${activeTool === 'mute' ? 'bg-[var(--color-accent)] text-black' : 'hover:bg-white/10 text-[var(--color-text-muted)]'}`}
-            title="Mute Tool (M)"
-          ><VolumeX size={16} /></button>
+        <div className={group}>
+          <button onClick={() => setTool('select')} className={iconBtn(activeTool === 'select')} title="Select Tool (V)"><MousePointer2 size={15} /></button>
+          <button onClick={() => setTool('scissors')} className={iconBtn(activeTool === 'scissors')} title="Scissors Tool (S)"><Scissors size={15} /></button>
+          <button onClick={() => setTool('mute')} className={iconBtn(activeTool === 'mute')} title="Mute Tool (M)"><VolumeX size={15} /></button>
         </div>
 
-        <div className="flex items-center gap-1 bg-white/5 p-1 rounded border border-white/10">
-          <button 
-            onClick={() => setSnapEnabled(!snapEnabled)}
-            className={`p-1.5 rounded transition-all ${snapEnabled ? 'text-[var(--color-accent)]' : 'text-white/20 hover:text-white/40'}`}
-            title="Snap to Grid"
-          ><Magnet size={16} /></button>
-          <button
-            onClick={() => setFollowPlayhead(!followPlayhead)}
-            className={`p-1.5 rounded transition-all ${followPlayhead ? 'text-[var(--color-accent)]' : 'text-white/20 hover:text-white/40'}`}
-            title="Follow Playhead"
-          ><Target size={16} /></button>
-          <button
-            onClick={() => setClickEnabled(!isClickEnabled)}
-            className={`p-1.5 rounded transition-all ${isClickEnabled ? 'text-[var(--color-accent)]' : 'text-white/20 hover:text-white/40'}`}
-            title="Click Track (metronome)"
-          ><Timer size={16} /></button>
-
-          <div className="w-[1px] h-4 bg-white/10 mx-1" />
-
-          <button 
-            onClick={() => setShowMixer(!showMixer)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-widest transition-all ${showMixer ? 'bg-[var(--color-accent)] text-black shadow-lg shadow-[var(--color-accent)]/20' : 'text-white/40 hover:bg-white/10 hover:text-white'}`}
-          >
-            <LayoutDashboard size={14} /> Mixer
+        <div className={group}>
+          <button onClick={() => setSnapEnabled(!snapEnabled)} className={toggleBtn(snapEnabled)} title="Snap to Grid"><Magnet size={15} /></button>
+          <button onClick={() => setFollowPlayhead(!followPlayhead)} className={toggleBtn(followPlayhead)} title="Follow Playhead"><Target size={15} /></button>
+          <button onClick={() => setClickEnabled(!isClickEnabled)} className={toggleBtn(isClickEnabled)} title="Click Track (metronome)"><Timer size={15} /></button>
+          {divider}
+          <button onClick={() => setShowMixer(!showMixer)} className={textBtn(showMixer)}>
+            <LayoutDashboard size={13} /> Mixer
           </button>
-          
-          <button 
-            onClick={onToggleCollaboration}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-widest transition-all ${isCollaborationOpen ? 'bg-zinc-600 text-white shadow-lg' : 'text-white/40 hover:bg-white/10 hover:text-white'}`}
-          >
-            <TrendingUp size={14} /> Hub
+          <button onClick={onToggleCollaboration} className={textBtn(isCollaborationOpen, 'bg-zinc-600 text-white shadow-lg')}>
+            <TrendingUp size={13} /> Hub
           </button>
         </div>
 
-        <div className="flex bg-white/5 p-1 rounded border border-white/10">
-            <button 
-              onClick={() => setTimelineMode('time')}
-              className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-tighter transition-all ${timelineMode === 'time' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white'}`}
-            >
-              Time
-            </button>
-            <button 
-              onClick={() => setTimelineMode('beats')}
-              className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-tighter transition-all ${timelineMode === 'beats' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white'}`}
-            >
-              Beats
-            </button>
+        <div className={`${group} gap-0`}>
+          <button
+            onClick={() => setTimelineMode('time')}
+            className={`px-2.5 py-1.5 rounded text-[9px] font-black uppercase tracking-tighter transition-all ${timelineMode === 'time' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white'}`}
+          >
+            Time
+          </button>
+          <button
+            onClick={() => setTimelineMode('beats')}
+            className={`px-2.5 py-1.5 rounded text-[9px] font-black uppercase tracking-tighter transition-all ${timelineMode === 'beats' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white'}`}
+          >
+            Beats
+          </button>
         </div>
 
-        <div className="flex items-center gap-1 bg-white/5 p-1 rounded border border-white/10">
-          <button onClick={() => setZoom(zoom * 0.8)} className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomOut size={16} /></button>
-          <button onClick={() => setZoom(zoom * 1.2)} className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomIn size={16} /></button>
+        <div className={group}>
+          <button onClick={() => setZoom(zoom * 0.8)} className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomOut size={15} /></button>
+          <button onClick={() => setZoom(zoom * 1.2)} className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomIn size={15} /></button>
         </div>
 
         {storageMode === 'firebase' && currentUser && !currentUser.isAnonymous && (
-          <div className="flex items-center gap-1.5 border-l border-white/10 pl-2 ml-1">
+          <div className="flex items-center gap-1.5 border-l border-white/10 pl-2 ml-0.5">
             <div className="w-6 h-6 rounded-md bg-[var(--color-accent)]/20 flex items-center justify-center shrink-0">
               <span className="text-[9px] font-black text-[var(--color-accent)] uppercase">
                 {(currentUser.name || '?').charAt(0)}
