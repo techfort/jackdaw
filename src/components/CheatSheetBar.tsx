@@ -14,6 +14,7 @@ const bindings: Array<{ key: string; action: string }> = [
   { key: 'Cmd/Ctrl+Shift+Z', action: 'Redo' },
   { key: 'Tab', action: 'Terminal focus' },
   { key: 'Esc', action: 'Cancel draft' },
+  { key: 'V', action: 'Visualizer' },
 ];
 
 export const CheatSheetBar: React.FC = () => {

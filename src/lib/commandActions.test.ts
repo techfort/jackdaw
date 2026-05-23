@@ -359,4 +359,21 @@ describe('addCommentFromCommand auto track resolution', () => {
     expect(result.ok).toBe(false);
     expect(result.message).toBe('Mixed zoom signs are not allowed.');
   });
+
+  it('toggles spectrum window with spectrum command', async () => {
+    const setSpectrumOpen = vi.fn();
+    getStateMock
+      .mockReturnValueOnce({ isSpectrumOpen: false, setSpectrumOpen })
+      .mockReturnValueOnce({ isSpectrumOpen: true, setSpectrumOpen });
+
+    let result = await executeTerminalCommand('spectrum');
+    expect(result.ok).toBe(true);
+    expect(setSpectrumOpen).toHaveBeenCalledWith(true);
+    expect(result.message).toContain('Opened');
+
+    result = await executeTerminalCommand('spec');
+    expect(result.ok).toBe(true);
+    expect(setSpectrumOpen).toHaveBeenCalledWith(false);
+    expect(result.message).toContain('Closed');
+  });
 });

@@ -500,8 +500,18 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
     return triggerPunchIn();
   }
 
+  if (/^spectrum$/i.test(command) || /^spec$/i.test(command)) {
+    const state = useStore.getState();
+    const nextOpen = !state.isSpectrumOpen;
+    state.setSpectrumOpen(nextOpen);
+    return {
+      ok: true,
+      message: `${nextOpen ? 'Opened' : 'Closed'} audio spectrum window.`,
+    };
+  }
+
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu, vd, c:, invite, e, e stem, punchin, +, -, ++, --',
+    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu, vd, c:, invite, e, e stem, punchin, spectrum, +, -, ++, --',
   };
 };
