@@ -21,6 +21,10 @@
       ]
     },
     "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "types": [
+      "vite/client"
+    ],
     "noEmit": true
   }
 }

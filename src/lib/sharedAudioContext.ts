@@ -11,3 +11,16 @@ export const getSharedAudioContext = (): AudioContext => {
   }
   return context;
 };
+
+const trackAnalysers = new Map<string, AnalyserNode>();
+
+export const getTrackAnalyser = (trackId: string): AnalyserNode => {
+  const ctx = getSharedAudioContext();
+  let analyser = trackAnalysers.get(trackId);
+  if (!analyser) {
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    trackAnalysers.set(trackId, analyser);
+  }
+  return analyser;
+};

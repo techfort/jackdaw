@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { openDB } from 'idb';
 
 export interface IAudioStorage {
   upload(key: string, data: ArrayBuffer, mimeType: string): Promise<string>;
@@ -10,6 +11,25 @@ export class NoopAudioStorage implements IAudioStorage {
     return '';
   }
   async delete(_key: string): Promise<void> {}
+}
+
+export class LocalAudioStorage implements IAudioStorage {
+  private db = openDB('jackdaw-local-db', 3);
+
+  async upload(key: string, data: ArrayBuffer, mimeType: string): Promise<string> {
+    const bytes = new Uint8Array(data);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const dataUrl = `data:${mimeType};base64,${btoa(binary)}`;
+    const db = await this.db;
+    await db.put('audio-cache', { trackId: key, dataUrl });
+    return dataUrl;
+  }
+
+  async delete(key: string): Promise<void> {
+    const db = await this.db;
+    await db.delete('audio-cache', key);
+  }
 }
 
 export class SupabaseAudioStorage implements IAudioStorage {
@@ -73,6 +93,12 @@ let audioStorageSingleton: IAudioStorage | null = null;
 
 export function createAudioStorage(getIdToken: () => Promise<string>): IAudioStorage {
   if (audioStorageSingleton) return audioStorageSingleton;
+
+  const storageMode = (import.meta.env.VITE_STORAGE_MODE as string | undefined) || 'local';
+  if (storageMode === 'local') {
+    audioStorageSingleton = new LocalAudioStorage();
+    return audioStorageSingleton;
+  }
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   const supabaseKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined;

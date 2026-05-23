@@ -71,8 +71,10 @@ export interface DAWState {
   markers: { 1: number | null, 2: number | null };
   selectedTrackId: string | null;
   showMixer: boolean;
+  isSpectrumOpen: boolean;
 
   // Actions
+  setSpectrumOpen: (open: boolean) => void;
   setSelectedTrackId: (id: string | null) => void;
   setShowMixer: (show: boolean) => void;
   clearSong: () => void;

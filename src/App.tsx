@@ -19,6 +19,7 @@ import { CollaborativeCursors } from './components/CollaborativeCursors';
 import { ProjectDashboard } from './components/ProjectDashboard';
 import { InviteAccept } from './components/InviteAccept';
 import { CommandTerminal } from './components/CommandTerminal';
+import { AudioSpectrumWindow } from './components/AudioSpectrumWindow';
 import { CheatSheetBar } from './components/CheatSheetBar';
 import { Users, LayoutDashboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -177,6 +178,9 @@ export default function App() {
       } else if (key === 'i') {
         e.preventDefault();
         importFiles(state.currentTime);
+      } else if (key === 'v') {
+        e.preventDefault();
+        state.setSpectrumOpen(!state.isSpectrumOpen);
       }
     };
 
@@ -561,6 +565,7 @@ export default function App() {
         </AnimatePresence>
 
         <CommandTerminal />
+        <AudioSpectrumWindow />
       </div>
 
       <CheatSheetBar />
