@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { useStore } from '../store';
-import { getSharedAudioContext, getTrackAnalyser } from '../lib/sharedAudioContext';
+import { getSharedAudioContext, getTrackAnalyser, getMasterAnalyser } from '../lib/sharedAudioContext';
 
 export const useAudioEngine = () => {
   const trackNodes = useRef<{ [clipId: string]: AudioBufferSourceNode }>({});
@@ -58,8 +58,8 @@ export const useAudioEngine = () => {
         gain.connect(ctx.destination);
         
         try {
-          const analyser = getTrackAnalyser(track.id);
-          gain.connect(analyser);
+          gain.connect(getTrackAnalyser(track.id));
+          gain.connect(getMasterAnalyser());
         } catch (e) {
           console.error('[AudioEngine] failed to connect analyser node:', e);
         }
