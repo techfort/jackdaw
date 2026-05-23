@@ -1,7 +1,7 @@
 import audioBufferToWav from 'audiobuffer-to-wav';
 import { TrackData } from '../types';
 
-export const exportMixdown = async (tracks: TrackData[], options?: { startTime?: number; endTime?: number }) => {
+export const exportMixdown = async (tracks: TrackData[], options?: { startTime?: number; endTime?: number; filename?: string }) => {
   if (tracks.length === 0) return;
 
   const tStart = Number(options?.startTime) || 0;
@@ -78,7 +78,9 @@ export const exportMixdown = async (tracks: TrackData[], options?: { startTime?:
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `jackdaw-mixdown-${Date.now()}${options?.startTime !== undefined ? '-selection' : ''}.wav`;
+  a.download = options?.filename
+    ? `${options.filename}.wav`
+    : `jackdaw-mixdown-${Date.now()}${options?.startTime !== undefined ? '-selection' : ''}.wav`;
   a.click();
   URL.revokeObjectURL(url);
 };

@@ -60,6 +60,7 @@ export const useStore = create<DAWState>((set, get) => {
     isSyncing: false,
     remotePresences: [],
     markers: { 1: null, 2: null },
+    markerLabels: { 1: '', 2: '' },
     selectedTrackId: null,
     showMixer: false,
     isSpectrumOpen: false,
@@ -79,6 +80,12 @@ export const useStore = create<DAWState>((set, get) => {
     setMarker: (index, time) => {
       set((state) => ({
         markers: { ...state.markers, [index]: time }
+      }));
+    },
+
+    setMarkerLabel: (index, label) => {
+      set((state) => ({
+        markerLabels: { ...state.markerLabels, [index]: label }
       }));
     },
 
@@ -246,6 +253,7 @@ export const useStore = create<DAWState>((set, get) => {
           volume: 1,
           isMuted: false,
           isSoloed: false,
+          createdAt: Date.now(),
           clips: [newClip]
         };
 
@@ -301,6 +309,7 @@ export const useStore = create<DAWState>((set, get) => {
           volume: 0.8,
           isMuted: false,
           isSoloed: false,
+          createdAt: Date.now(),
           clips: [{
             id: generateId(),
             offset: offset,
@@ -325,6 +334,7 @@ export const useStore = create<DAWState>((set, get) => {
           volume: 0.8,
           isMuted: false,
           isSoloed: false,
+          createdAt: Date.now(),
           clips: [{
             id: generateId(),
             offset: 0,

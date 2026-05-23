@@ -31,6 +31,7 @@ export interface TrackData {
   isMuted: boolean;
   isSoloed: boolean;
   clips: Clip[];
+  createdAt?: number;
 }
 
 export type TimelineMode = 'time' | 'beats';
@@ -69,6 +70,7 @@ export interface DAWState {
   remotePresences: any[];
   lastRemoteUpdate?: number;
   markers: { 1: number | null, 2: number | null };
+  markerLabels: { 1: string; 2: string };
   selectedTrackId: string | null;
   showMixer: boolean;
   isSpectrumOpen: boolean;
@@ -86,6 +88,7 @@ export interface DAWState {
   pushUpdate: () => Promise<void>;
   punchIn: (file: File) => Promise<void>;
   setMarker: (index: 1 | 2, time: number | null) => void;
+  setMarkerLabel: (index: 1 | 2, label: string) => void;
   goToMarker: (index: 1 | 2) => void;
   seek: (delta: number) => void;
   goToStart: () => void;
