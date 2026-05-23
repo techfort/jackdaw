@@ -249,6 +249,62 @@ describe('addCommentFromCommand auto track resolution', () => {
     expect(updateTrack).toHaveBeenCalledWith('track-1', { volume: 0.5 });
   });
 
+  it('volup alias raises selected track by default step when no amount given', async () => {
+    const updateTrack = vi.fn();
+    getStateMock.mockReturnValue({
+      selectedTrackId: 'track-1',
+      tracks: [{ id: 'track-1', name: 'Bass', volume: 0.5 }],
+      updateTrack,
+    });
+
+    const result = await executeTerminalCommand('volup');
+
+    expect(result.ok).toBe(true);
+    expect(updateTrack).toHaveBeenCalledWith('track-1', { volume: 0.6 });
+  });
+
+  it('voldown alias lowers named track by default step when no amount given', async () => {
+    const updateTrack = vi.fn();
+    getStateMock.mockReturnValue({
+      selectedTrackId: null,
+      tracks: [{ id: 'track-1', name: 'Drums', volume: 0.8 }],
+      updateTrack,
+    });
+
+    const result = await executeTerminalCommand('voldown Drums');
+
+    expect(result.ok).toBe(true);
+    expect(updateTrack).toHaveBeenCalledWith('track-1', { volume: expect.closeTo(0.7, 5) });
+  });
+
+  it('bare track ref without amount uses default step', async () => {
+    const updateTrack = vi.fn();
+    getStateMock.mockReturnValue({
+      selectedTrackId: null,
+      tracks: [{ id: 'track-1', name: 'Bass', volume: 0.5 }],
+      updateTrack,
+    });
+
+    const result = await executeTerminalCommand('vu Bass');
+
+    expect(result.ok).toBe(true);
+    expect(updateTrack).toHaveBeenCalledWith('track-1', { volume: 0.6 });
+  });
+
+  it('volup with explicit track ref and amount', async () => {
+    const updateTrack = vi.fn();
+    getStateMock.mockReturnValue({
+      selectedTrackId: null,
+      tracks: [{ id: 'track-1', name: 'Lead', volume: 0.3 }],
+      updateTrack,
+    });
+
+    const result = await executeTerminalCommand('volup Lead 0.2');
+
+    expect(result.ok).toBe(true);
+    expect(updateTrack).toHaveBeenCalledWith('track-1', { volume: 0.5 });
+  });
+
   it('rejects volume commands without a positive float', async () => {
     const updateTrack = vi.fn();
     getStateMock.mockReturnValue({
