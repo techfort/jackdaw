@@ -10,10 +10,8 @@ export const usePresenceSync = () => {
     if (!isSyncing || !currentProjectId || !currentSongId) return;
 
     const now = Date.now();
-    // Send presence every 1s OR if position changed significantly (scrubbing)
-    const significantChange = Math.abs(currentTime - lastPos.current) > 0.5;
-
-    if (now - lastUpdatedTime.current > 1000 || significantChange) {
+    // Strict 1s ceiling — no position-override that could spike writes during scrubbing
+    if (now - lastUpdatedTime.current > 1000) {
       updatePresence(currentTime);
       lastUpdatedTime.current = now;
       lastPos.current = currentTime;

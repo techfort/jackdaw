@@ -4,6 +4,7 @@ import { getSharedAudioContext } from './lib/sharedAudioContext';
 import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus } from './types';
 import { ConcurrentUpdateError } from './services/storage/types';
 import { storageService, authService } from './services/storage';
+import { parseMentions, parseTags } from './lib/mentionUtils';
 
 
 interface HistoryState {
@@ -449,7 +450,9 @@ export const useStore = create<DAWState>((set, get) => {
           userId,
           userName,
           status: 'open' as const,
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          mentions: parseMentions(text),
+          tags: parseTags(text)
         }],
         canUndo: true
       }));
@@ -470,6 +473,16 @@ export const useStore = create<DAWState>((set, get) => {
       pushToHistory();
       set((state) => ({
         comments: state.comments.map(c => c.id === id ? { ...c, status } : c),
+        canUndo: true
+      }));
+      get().pushUpdate().catch(err => console.error("Update failed", err));
+    },
+
+    resolveComments: (ids) => {
+      pushToHistory();
+      const idSet = new Set(ids);
+      set((state) => ({
+        comments: state.comments.map(c => idSet.has(c.id) ? { ...c, status: 'approved' as const } : c),
         canUndo: true
       }));
       get().pushUpdate().catch(err => console.error("Update failed", err));
