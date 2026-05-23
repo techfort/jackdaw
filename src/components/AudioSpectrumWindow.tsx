@@ -1,6 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { useStore } from '../store';
-import { getTrackAnalyser } from '../lib/sharedAudioContext';
+import { getSharedAudioContext, getTrackAnalyser, getMasterAnalyser } from '../lib/sharedAudioContext';
+
+const LABEL_HEIGHT = 18;
+const FREQ_LABELS = [20, 100, 500, 1000, 2000, 5000, 10000, 20000];
+const ACTIVE_BIN_RATIO = 0.85;
 
 export const AudioSpectrumWindow: React.FC = () => {
   const isSpectrumOpen = useStore(state => state.isSpectrumOpen);
@@ -14,7 +18,7 @@ export const AudioSpectrumWindow: React.FC = () => {
   const selectedTrack = tracks.find(t => t.id === selectedTrackId);
 
   useEffect(() => {
-    if (!isSpectrumOpen || !selectedTrackId || !canvasRef.current) {
+    if (!isSpectrumOpen || !canvasRef.current) {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
@@ -26,11 +30,10 @@ export const AudioSpectrumWindow: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const analyser = getTrackAnalyser(selectedTrackId);
+    const analyser = selectedTrackId ? getTrackAnalyser(selectedTrackId) : getMasterAnalyser();
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
 
-    // Setup high-DPI scaling
     const resizeCanvas = () => {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
@@ -46,55 +49,84 @@ export const AudioSpectrumWindow: React.FC = () => {
       const rect = canvas.getBoundingClientRect();
       const width = rect.width;
       const height = rect.height;
+      const barAreaHeight = height - LABEL_HEIGHT;
 
-      // Request next frame immediately to keep loop running
       animationRef.current = requestAnimationFrame(render);
 
-      // Get FFT frequency data
       analyser.getByteFrequencyData(dataArray);
 
-      // Draw background
-      ctx.fillStyle = 'rgba(13, 17, 23, 0.35)'; // Semitransparent for visual trails
+      // Background
+      ctx.fillStyle = 'rgba(13, 17, 23, 0.35)';
       ctx.fillRect(0, 0, width, height);
 
-      // Draw subtle grid lines
+      // Horizontal grid lines (bar area only)
       ctx.strokeStyle = 'rgba(45, 51, 59, 0.15)';
       ctx.lineWidth = 1;
       for (let i = 1; i < 4; i++) {
-        const y = (height / 4) * i;
+        const y = (barAreaHeight / 4) * i;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(width, y);
         ctx.stroke();
       }
 
-      // Draw frequency bars
-      // We limit to the active bins to focus on human-audible frequency ranges (exclude high bin roll-offs)
-      const activeBins = Math.floor(bufferLength * 0.85); 
-      const barWidth = (width / activeBins);
-      
-      // Gradient matching the premium look (A742FF -> 00E5FF -> F27D26)
-      const gradient = ctx.createLinearGradient(0, height, 0, 0);
-      gradient.addColorStop(0, '#A742FF'); // Neon purple at bottom
-      gradient.addColorStop(0.5, '#00E5FF'); // Cyan in middle
-      gradient.addColorStop(1, '#F27D26'); // Orange accent at top
+      // Separator above labels
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, barAreaHeight);
+      ctx.lineTo(width, barAreaHeight);
+      ctx.stroke();
+
+      // Frequency bars
+      const activeBins = Math.floor(bufferLength * ACTIVE_BIN_RATIO);
+      const barWidth = width / activeBins;
+
+      const gradient = ctx.createLinearGradient(0, barAreaHeight, 0, 0);
+      gradient.addColorStop(0, '#A742FF');
+      gradient.addColorStop(0.5, '#00E5FF');
+      gradient.addColorStop(1, '#F27D26');
 
       ctx.fillStyle = gradient;
 
       for (let i = 0; i < activeBins; i++) {
-        // Value range is 0 to 255
         const value = dataArray[i];
-        // Scale height to canvas dimensions
         const percent = value / 255;
-        const barHeight = Math.max(2, percent * (height - 10));
-
+        const barHeight = Math.max(2, percent * (barAreaHeight - 10));
         const x = i * barWidth;
-        const y = height - barHeight;
+        const y = barAreaHeight - barHeight;
 
-        // Draw rounded top bar
         ctx.beginPath();
         ctx.roundRect(x + 1, y, Math.max(1.5, barWidth - 1.5), barHeight, [2, 2, 0, 0]);
         ctx.fill();
+      }
+
+      // Frequency labels
+      const sampleRate = getSharedAudioContext().sampleRate;
+      const nyquist = sampleRate / 2;
+
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+
+      for (const freq of FREQ_LABELS) {
+        if (freq > nyquist) continue;
+        // x position derived from bin index mapped across activeBins
+        const x = (freq / (nyquist * ACTIVE_BIN_RATIO)) * width;
+        if (x > width) continue;
+
+        // Tick mark
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, barAreaHeight + 1);
+        ctx.lineTo(x, barAreaHeight + 5);
+        ctx.stroke();
+
+        // Label
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        const label = freq >= 1000 ? `${freq / 1000}k` : String(freq);
+        ctx.fillText(label, x, height - 1);
       }
     };
 
@@ -113,17 +145,14 @@ export const AudioSpectrumWindow: React.FC = () => {
 
   return (
     <div className="absolute bottom-2 right-[444px] z-[110] w-[420px] h-56 rounded border border-[var(--color-border-main)] bg-[var(--color-bg-sidebar)] shadow-2xl flex flex-col overflow-hidden">
-      {/* Header */}
       <div className="h-7 px-2 border-b border-[var(--color-border-main)] bg-black/20 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-muted)]">
             Audio Spectrum
           </span>
-          {selectedTrack && (
-            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[var(--color-accent-purple)]/20 border border-[var(--color-accent-purple)]/40 text-[var(--color-accent)] uppercase tracking-wider truncate max-w-[200px]">
-              {selectedTrack.name}
-            </span>
-          )}
+          <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[var(--color-accent-purple)]/20 border border-[var(--color-accent-purple)]/40 text-[var(--color-accent)] uppercase tracking-wider truncate max-w-[200px]">
+            {selectedTrack ? selectedTrack.name : 'Master'}
+          </span>
         </div>
         <button
           onClick={() => setSpectrumOpen(false)}
@@ -134,22 +163,12 @@ export const AudioSpectrumWindow: React.FC = () => {
         </button>
       </div>
 
-      {/* Visualizer Area */}
-      <div className="flex-1 relative bg-[var(--color-bg-deep)]/30 flex items-center justify-center">
-        {selectedTrackId ? (
-          <canvas
-            ref={canvasRef}
-            className="w-full h-full block"
-            aria-label={`Spectrum visualizer for ${selectedTrack?.name || 'selected track'}`}
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center p-4 text-center">
-            <span className="text-2xl mb-2 select-none opacity-50">📊</span>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-dark)] max-w-xs leading-relaxed">
-              Select a track to view spectrum
-            </p>
-          </div>
-        )}
+      <div className="flex-1 relative bg-[var(--color-bg-deep)]/30">
+        <canvas
+          ref={canvasRef}
+          className="w-full h-full block"
+          aria-label={selectedTrack ? `Spectrum for ${selectedTrack.name}` : 'Master output spectrum'}
+        />
       </div>
     </div>
   );
