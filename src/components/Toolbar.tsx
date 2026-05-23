@@ -95,6 +95,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const showMixer = useStore(state => state.showMixer);
   const setShowMixer = useStore(state => state.setShowMixer);
   const markers = useStore(state => state.markers);
+  const markerLabels = useStore(state => state.markerLabels);
   const goToMarker = useStore(state => state.goToMarker);
   const goToStart = useStore(state => state.goToStart);
   const goToEnd = useStore(state => state.goToEnd);
@@ -211,7 +212,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
     if (useSelection && markers[1] !== null && markers[2] !== null) {
       const start = Math.min(markers[1], markers[2]);
       const end = Math.max(markers[1], markers[2]);
-      exportMixdown(tracks, { startTime: start, endTime: end });
+      const label1 = markerLabels[1] || 'In';
+      const label2 = markerLabels[2] || 'Out';
+      const safeName = (currentSongName || 'jackdaw').replace(/[^a-z0-9_\-\s]/gi, '').trim() || 'jackdaw';
+      exportMixdown(tracks, { startTime: start, endTime: end, filename: `${safeName}-${label1}-to-${label2}` });
     } else {
       exportMixdown(tracks);
     }
@@ -454,11 +458,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
               </p>
               
               <div className="flex flex-col gap-2">
-                <button 
+                <button
                   onClick={() => doExport(true)}
                   className="w-full py-3 bg-[var(--color-accent)] text-black rounded-lg font-black uppercase text-[10px] tracking-widest hover:scale-[1.02] transition-transform flex items-center justify-center gap-2"
                 >
-                  <Flag size={14} /> Export Selection Only
+                  <Flag size={14} /> Export "{markerLabels[1] || 'In'}" → "{markerLabels[2] || 'Out'}"
                 </button>
                 <button 
                   onClick={() => doExport(false)}

@@ -16,11 +16,84 @@ import {
   LogIn,
   LogOut,
   Edit2,
-  Users
+  Users,
+  Activity,
+  Music2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { MembersPanel } from './MembersPanel';
+
+interface ActivityEvent {
+  id: string;
+  kind: 'track_added' | 'comment_added';
+  timestamp: number;
+  label: string;
+  detail: string;
+  userId?: string;
+  userName?: string;
+}
+
+const ActivityFeed: React.FC<{
+  tracks: any[];
+  comments: any[];
+  getTrackName: (id: string) => string;
+  getUserColor: (id: string) => string;
+}> = ({ tracks, comments, getTrackName, getUserColor }) => {
+  const events: ActivityEvent[] = [
+    ...tracks
+      .filter(t => t.createdAt)
+      .map(t => ({
+        id: `track-${t.id}`,
+        kind: 'track_added' as const,
+        timestamp: t.createdAt!,
+        label: t.name,
+        detail: 'Track added',
+      })),
+    ...comments.map(c => ({
+      id: `comment-${c.id}`,
+      kind: 'comment_added' as const,
+      timestamp: c.createdAt,
+      label: c.text.length > 60 ? `${c.text.slice(0, 60)}…` : c.text,
+      detail: `Note on ${getTrackName(c.trackId)}`,
+      userId: c.userId,
+      userName: c.userName,
+    })),
+  ].sort((a, b) => b.timestamp - a.timestamp);
+
+  if (events.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center opacity-20 text-center px-10">
+        <div className="w-16 h-16 rounded-3xl bg-white/5 flex items-center justify-center mb-4 border border-white/5">
+          <Activity size={32} />
+        </div>
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] leading-relaxed">No activity yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-2">
+      {events.map(ev => (
+        <div key={ev.id} className="flex gap-3 items-start p-3 rounded-xl bg-white/[0.02] border border-white/5">
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border border-white/10 ${ev.userId ? getUserColor(ev.userId) : 'bg-zinc-800'}`}>
+            {ev.kind === 'track_added'
+              ? <Music2 size={12} className="text-white" />
+              : <MessageSquare size={12} className="text-white" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-black text-white/80 leading-snug truncate">{ev.label}</p>
+            <p className="text-[9px] text-white/30 font-bold uppercase tracking-tighter">{ev.detail}</p>
+            {ev.userName && <p className="text-[9px] text-[var(--color-accent)] font-bold mt-0.5">{ev.userName}</p>}
+          </div>
+          <span className="text-[8px] text-white/20 font-mono shrink-0 mt-0.5" title={new Date(ev.timestamp).toLocaleString()}>
+            {formatDistanceToNow(ev.timestamp, { addSuffix: true })}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const {
@@ -35,7 +108,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
     currentTime,
     currentUser
   } = useStore();
-  const [activeTab, setActiveTab] = useState<'comments' | 'members'>('comments');
+  const [activeTab, setActiveTab] = useState<'comments' | 'members' | 'activity'>('comments');
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('open');
   const [search, setSearch] = useState('');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -201,9 +274,16 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
           >
             <Users size={10} /> Members
           </button>
+          <button
+            onClick={() => setActiveTab('activity')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === 'activity' ? 'bg-zinc-700 text-white shadow-lg' : 'text-white/30 hover:text-white hover:bg-white/5'}`}
+          >
+            <Activity size={10} /> Feed
+          </button>
         </div>
 
-        {activeTab === 'members' ? null : (<>
+        {activeTab === 'comments' ? (<>
+
         {/* Stats Row */}
         <div className="grid grid-cols-3 gap-3 mb-5">
           <div className="bg-white/[0.03] p-3 rounded-xl border border-white/5">
@@ -361,11 +441,14 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
             </button>
           )}
         </div>
-        </>)}
+        </>) : null}
       </div>
 
       {/* Members tab body */}
       {activeTab === 'members' && <MembersPanel />}
+
+      {/* Activity feed tab body */}
+      {activeTab === 'activity' && <ActivityFeed tracks={tracks} comments={comments} getTrackName={getTrackName} getUserColor={getUserColor} />}
 
       {/* Task List (comments tab) */}
       {activeTab === 'comments' && <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4">
