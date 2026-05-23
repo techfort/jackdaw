@@ -6,6 +6,7 @@
 import React, { useRef, useEffect } from 'react';
 import { useStore, useProjectDuration } from './store';
 import { useAudioEngine } from './hooks/useAudioEngine';
+import { useClickTrack } from './hooks/useClickTrack';
 import { useFileImport } from './hooks/useFileImport';
 import { usePresenceSync } from './hooks/usePresenceSync';
 import { Toolbar } from './components/Toolbar';
@@ -211,8 +212,9 @@ export default function App() {
 
   const currentSongIdForRender = useStore(state => state.currentSongId);
 
-  useAudioEngine(); // Initialize audio engine
-  usePresenceSync(); // Throttled presence updates
+  useAudioEngine();
+  useClickTrack();
+  usePresenceSync();
 
   // Detect invite params in the URL early — persist to localStorage so onAuthStateChanged
   // can pick them up regardless of sign-in timing (handles already-signed-in users too)

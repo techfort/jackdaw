@@ -12,7 +12,8 @@ import {
   FastForward,
   Flag,
   Mic,
-  LogOut
+  LogOut,
+  Timer
 } from 'lucide-react';
 import { useStore } from '../store';
 import { exportMixdown } from '../lib/exportUtils';
@@ -94,6 +95,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const canRedo = useStore(state => state.canRedo);
   const showMixer = useStore(state => state.showMixer);
   const setShowMixer = useStore(state => state.setShowMixer);
+  const isClickEnabled = useStore(state => state.isClickEnabled);
+  const setClickEnabled = useStore(state => state.setClickEnabled);
   const markers = useStore(state => state.markers);
   const markerLabels = useStore(state => state.markerLabels);
   const goToMarker = useStore(state => state.goToMarker);
@@ -379,12 +382,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
             className={`p-1.5 rounded transition-all ${snapEnabled ? 'text-[var(--color-accent)]' : 'text-white/20 hover:text-white/40'}`}
             title="Snap to Grid"
           ><Magnet size={16} /></button>
-          <button 
+          <button
             onClick={() => setFollowPlayhead(!followPlayhead)}
             className={`p-1.5 rounded transition-all ${followPlayhead ? 'text-[var(--color-accent)]' : 'text-white/20 hover:text-white/40'}`}
             title="Follow Playhead"
           ><Target size={16} /></button>
-          
+          <button
+            onClick={() => setClickEnabled(!isClickEnabled)}
+            className={`p-1.5 rounded transition-all ${isClickEnabled ? 'text-[var(--color-accent)]' : 'text-white/20 hover:text-white/40'}`}
+            title="Click Track (metronome)"
+          ><Timer size={16} /></button>
+
           <div className="w-[1px] h-4 bg-white/10 mx-1" />
 
           <button 

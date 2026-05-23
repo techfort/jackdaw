@@ -525,8 +525,18 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
     };
   }
 
+  if (/^click$/i.test(command) || /^metronome$/i.test(command)) {
+    const state = useStore.getState();
+    const nextEnabled = !state.isClickEnabled;
+    state.setClickEnabled(nextEnabled);
+    return {
+      ok: true,
+      message: `Click track ${nextEnabled ? 'enabled' : 'disabled'}.`,
+    };
+  }
+
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu/volup, vd/voldown, c:, invite, e, e stem, punchin, spectrum, +, -, ++, --',
+    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu/volup, vd/voldown, c:, invite, e, e stem, punchin, spectrum, click/metronome, +, -, ++, --',
   };
 };
