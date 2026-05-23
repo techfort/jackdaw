@@ -25,6 +25,7 @@ export type CommandResult = {
 const BEATS_PER_BAR = 4;
 const ZOOM_IN_FACTOR = 1.1;
 const ZOOM_OUT_FACTOR = 0.9;
+const DEFAULT_VOLUME_STEP = 0.1;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -196,10 +197,15 @@ const parseVolumeCommandArgs = (rawArgs: string): { ref: string | null; amount: 
     return { ref: quoted[1], amount: Number.isFinite(amount) ? amount : null };
   }
 
+  // Quoted track ref with no amount — bare: volup "Bass"
+  const quotedBare = cleaned.match(/^"(.+)"$/);
+  if (quotedBare) return { ref: quotedBare[1], amount: null };
+
   const parts = cleaned.split(/\s+/);
   if (parts.length === 1) {
     const amount = Number(parts[0]);
-    return { ref: null, amount: Number.isFinite(amount) ? amount : null };
+    // Numeric token → step for selected track; non-numeric → track ref with default step
+    return Number.isFinite(amount) ? { ref: null, amount } : { ref: parts[0], amount: null };
   }
 
   const amount = Number(parts.slice(1).join(' '));
@@ -209,7 +215,9 @@ const parseVolumeCommandArgs = (rawArgs: string): { ref: string | null; amount: 
 export const adjustTrackVolume = (rawArgs: string, direction: 'up' | 'down'): CommandResult => {
   const state = useStore.getState();
   const parsed = parseVolumeCommandArgs(rawArgs);
-  if (parsed.amount === null || parsed.amount <= 0) {
+
+  // Explicit zero or negative amount is always invalid
+  if (parsed.amount !== null && parsed.amount <= 0) {
     return { ok: false, message: 'Volume amount must be a positive number.' };
   }
 
@@ -221,15 +229,16 @@ export const adjustTrackVolume = (rawArgs: string, direction: 'up' | 'down'): Co
     return { ok: false, message: parsed.ref ? `Track not found: ${parsed.ref}` : 'select a track before changing volume' };
   }
 
+  const step = parsed.amount ?? DEFAULT_VOLUME_STEP;
   const currentVolume = Number(target.volume) || 0;
-  const delta = direction === 'up' ? parsed.amount : -parsed.amount;
+  const delta = direction === 'up' ? step : -step;
   const nextVolume = Math.max(0, Math.min(1, currentVolume + delta));
   state.updateTrack(target.id, { volume: nextVolume });
 
   const id = localTrackId(state.tracks, target.id);
   return {
     ok: true,
-    message: `${direction === 'up' ? 'Raised' : 'Lowered'} track "${target.name}" (id: ${id}) volume by ${parsed.amount.toFixed(3)} to ${Math.round(nextVolume * 100)}%.`
+    message: `${direction === 'up' ? 'Raised' : 'Lowered'} track "${target.name}" (id: ${id}) volume by ${step.toFixed(3)} to ${Math.round(nextVolume * 100)}%.`
   };
 };
 
@@ -469,6 +478,12 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
     return adjustTrackVolume(match[2], match[1].toLowerCase() === 'u' ? 'up' : 'down');
   }
 
+  // Long-form aliases: volup / voldown (with optional track ref and/or amount)
+  match = command.match(/^vol(up|down)(?:\s+(.+))?$/i);
+  if (match) {
+    return adjustTrackVolume(match[2] || '', match[1].toLowerCase() === 'up' ? 'up' : 'down');
+  }
+
   match = command.match(/^c:\s*"([\s\S]+)"\s*$/i);
   if (match) {
     return addCommentFromCommand(match[1]);
@@ -512,6 +527,6 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
 
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu, vd, c:, invite, e, e stem, punchin, spectrum, +, -, ++, --',
+    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu/volup, vd/voldown, c:, invite, e, e stem, punchin, spectrum, +, -, ++, --',
   };
 };
