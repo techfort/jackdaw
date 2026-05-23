@@ -64,10 +64,12 @@ export const useStore = create<DAWState>((set, get) => {
     selectedTrackId: null,
     showMixer: false,
     isSpectrumOpen: false,
+    isClickEnabled: false,
     currentUser: null,
 
     setCurrentUser: (user) => set({ currentUser: user }),
     setSpectrumOpen: (open) => set({ isSpectrumOpen: open }),
+    setClickEnabled: (enabled) => set({ isClickEnabled: enabled }),
     setSelectedTrackId: (id) => set({ selectedTrackId: id }),
     clearSong: () => {
       set({ currentSongId: null, currentSongName: 'Untitled Song', tracks: [], comments: [], isPlaying: false, isSyncing: false });
