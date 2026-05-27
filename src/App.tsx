@@ -604,7 +604,7 @@ export default function App() {
                <div className="h-full bg-[var(--color-accent)]" style={{ width: `${((zoom - 0.5) / 499.5) * 100}%` }}></div>
              </div>
            </div>
-           <span className="text-[10px] text-[var(--color-text-dark)] font-mono tracking-tighter">v{import.meta.env.VITE_APP_VERSION || 'dev'}</span>
+           <span className="text-[10px] text-[var(--color-text-dark)] font-mono tracking-tighter">jackdaw @ {import.meta.env.VITE_APP_VERSION || 'dev'}</span>
         </div>
       </footer>
 
