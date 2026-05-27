@@ -82,6 +82,7 @@ export default function App() {
   const timelineMode = useStore(state => state.timelineMode);
   const isPlaying = useStore(state => state.isPlaying);
   const followPlayhead = useStore(state => state.followPlayhead);
+  const currentUser = useStore(state => state.currentUser);
   const currentProjectId = useStore(state => state.currentProjectId);
   const currentSongId = useStore(state => state.currentSongId);
   const syncSong = useStore(state => state.syncSong);
@@ -420,6 +421,15 @@ export default function App() {
               >
                 {isMagicLinkPending ? 'Complete Sign-in' : 'Send Sign-in Link'}
               </button>
+              {currentUser?.isAnonymous && (
+                <button
+                  type="button"
+                  onClick={() => setShowSignInGate(false)}
+                  className="w-full text-[10px] text-[var(--color-text-muted)] hover:text-white uppercase tracking-widest py-1 transition-colors"
+                >
+                  Continue without signing in
+                </button>
+              )}
             </form>
           )}
         </div>
@@ -434,7 +444,17 @@ export default function App() {
       onContextMenu={(e) => e.preventDefault()}
     >
       <FollowPlayheadLogic />
-      <Toolbar onToggleCollaboration={() => setShowCollaboration(!showCollaboration)} isCollaborationOpen={showCollaboration} />
+      <Toolbar
+        onToggleCollaboration={() => setShowCollaboration(!showCollaboration)}
+        isCollaborationOpen={showCollaboration}
+        onSignIn={() => {
+          setSignInEmail('');
+          setSignInDisplayName('');
+          setSignInSent(false);
+          setSignInError('');
+          setShowSignInGate(true);
+        }}
+      />
       
       <div className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 flex flex-col overflow-hidden relative">

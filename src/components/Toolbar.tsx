@@ -13,6 +13,7 @@ import {
   Flag,
   Mic,
   LogOut,
+  LogIn,
   Timer
 } from 'lucide-react';
 import { useStore } from '../store';
@@ -27,6 +28,7 @@ import { registerPunchInTrigger } from '../lib/commandActions';
 interface ToolbarProps {
   onToggleCollaboration?: () => void;
   isCollaborationOpen?: boolean;
+  onSignIn?: () => void;
 }
 
 const PlayheadCounter: React.FC = () => {
@@ -64,7 +66,7 @@ const PlayheadCounter: React.FC = () => {
   );
 };
 
-export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isCollaborationOpen }) => {
+export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isCollaborationOpen, onSignIn }) => {
   const { importFiles } = useFileImport();
   const punchIn = useStore(state => state.punchIn);
   const punchInRef = useRef<HTMLInputElement>(null);
@@ -408,24 +410,39 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           <button onClick={() => setZoom(zoom * 1.2)} className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomIn size={15} /></button>
         </div>
 
-        {storageMode === 'firebase' && currentUser && !currentUser.isAnonymous && (
+        {storageMode === 'firebase' && (
           <div className="flex items-center gap-1.5 border-l border-white/10 pl-2 ml-0.5">
-            <div className="w-6 h-6 rounded-md bg-[var(--color-accent)]/20 flex items-center justify-center shrink-0">
-              <span className="text-[9px] font-black text-[var(--color-accent)] uppercase">
-                {(currentUser.name || '?').charAt(0)}
-              </span>
-            </div>
-            <span className="text-[9px] text-white/40 font-bold truncate max-w-[72px] hidden lg:block">
-              {currentUser.name}
-            </span>
-            <button
-              onClick={() => authService.signOut()}
-              className="p-1.5 text-white/30 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/60"
-              title="Sign out"
-              aria-label="Sign out"
-            >
-              <LogOut size={14} />
-            </button>
+            {currentUser && !currentUser.isAnonymous ? (
+              <>
+                <div className="w-6 h-6 rounded-md bg-[var(--color-accent)]/20 flex items-center justify-center shrink-0">
+                  <span className="text-[9px] font-black text-[var(--color-accent)] uppercase">
+                    {(currentUser.name || '?').charAt(0)}
+                  </span>
+                </div>
+                <span className="text-[9px] text-white/40 font-bold truncate max-w-[72px] hidden lg:block">
+                  {currentUser.name}
+                </span>
+                <button
+                  onClick={() => authService.signOut()}
+                  className="flex items-center gap-1 px-2 py-1 text-white/30 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/60"
+                  title="Sign out"
+                  aria-label="Sign out"
+                >
+                  <LogOut size={13} />
+                  <span className="text-[9px] font-bold uppercase tracking-wide hidden sm:block">Sign Out</span>
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={onSignIn}
+                className="flex items-center gap-1 px-2 py-1 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/60"
+                title="Sign in"
+                aria-label="Sign in"
+              >
+                <LogIn size={13} />
+                <span className="text-[9px] font-bold uppercase tracking-wide">Sign In</span>
+              </button>
+            )}
           </div>
         )}
       </div>
