@@ -412,16 +412,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
 
         {storageMode === 'firebase' && (
           <div className="flex items-center gap-1.5 border-l border-white/10 pl-2 ml-0.5">
-            {currentUser && !currentUser.isAnonymous ? (
+            {currentUser ? (
               <>
-                <div className="w-6 h-6 rounded-md bg-[var(--color-accent)]/20 flex items-center justify-center shrink-0">
-                  <span className="text-[9px] font-black text-[var(--color-accent)] uppercase">
-                    {(currentUser.name || '?').charAt(0)}
-                  </span>
-                </div>
-                <span className="text-[9px] text-white/40 font-bold truncate max-w-[72px] hidden lg:block">
-                  {currentUser.name}
-                </span>
+                {!currentUser.isAnonymous && (
+                  <>
+                    <div className="w-6 h-6 rounded-md bg-[var(--color-accent)]/20 flex items-center justify-center shrink-0">
+                      <span className="text-[9px] font-black text-[var(--color-accent)] uppercase">
+                        {(currentUser.name || '?').charAt(0)}
+                      </span>
+                    </div>
+                    <span className="text-[9px] text-white/40 font-bold truncate max-w-[72px] hidden lg:block">
+                      {currentUser.name}
+                    </span>
+                  </>
+                )}
                 <button
                   onClick={() => authService.signOut()}
                   className="flex items-center gap-1 px-2 py-1 text-white/30 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/60"
@@ -431,6 +435,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
                   <LogOut size={13} />
                   <span className="text-[9px] font-bold uppercase tracking-wide hidden sm:block">Sign Out</span>
                 </button>
+                {currentUser.isAnonymous && (
+                  <button
+                    onClick={onSignIn}
+                    className="flex items-center gap-1 px-2 py-1 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/60"
+                    title="Sign in"
+                    aria-label="Sign in"
+                  >
+                    <LogIn size={13} />
+                    <span className="text-[9px] font-bold uppercase tracking-wide">Sign In</span>
+                  </button>
+                )}
               </>
             ) : (
               <button
