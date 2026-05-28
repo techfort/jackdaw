@@ -120,6 +120,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
   const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [expandedReplyIds, setExpandedReplyIds] = useState<Set<string>>(new Set());
+  const [openStatusId, setOpenStatusId] = useState<string | null>(null);
 
   useEffect(() => {
     if (activeTab === 'comments') {
@@ -127,6 +128,13 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
       if (openIds.length > 0) markCommentsSeen(openIds);
     }
   }, [activeTab, comments, markCommentsSeen]);
+
+  useEffect(() => {
+    if (!openStatusId) return;
+    const close = () => setOpenStatusId(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [openStatusId]);
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('open');
   const [search, setSearch] = useState('');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -539,20 +547,28 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                           <MessageSquare size={10} />
                           {getTrackName(comment.trackId)}
                         </span>
-                        <select
-                          value={comment.status}
-                          onChange={(e) => setCommentStatus(comment.id, e.target.value as any)}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border-0 outline-none cursor-pointer ${STATUS_COLORS[comment.status] || STATUS_COLORS.open}`}
-                          style={{ colorScheme: 'dark' }}
-                          title="Set comment status"
-                          aria-label="Comment status"
-                        >
-                          <option value="open">Open</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="needs_review">Needs Review</option>
-                          <option value="approved">Approved</option>
-                        </select>
+                        <div className="relative" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => setOpenStatusId(openStatusId === comment.id ? null : comment.id)}
+                            className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded cursor-pointer ${STATUS_COLORS[comment.status] || STATUS_COLORS.open}`}
+                            title="Set comment status"
+                          >
+                            {comment.status.replace('_', ' ')}
+                          </button>
+                          {openStatusId === comment.id && (
+                            <div className="absolute left-0 top-full mt-1 z-50 bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded shadow-xl min-w-[110px] overflow-hidden">
+                              {(['open', 'in_progress', 'needs_review', 'approved'] as const).map(s => (
+                                <button
+                                  key={s}
+                                  onClick={() => { setCommentStatus(comment.id, s); setOpenStatusId(null); }}
+                                  className={`w-full text-left text-[8px] font-bold uppercase tracking-widest px-2 py-1.5 hover:bg-white/10 transition-colors ${STATUS_COLORS[s]}`}
+                                >
+                                  {s.replace('_', ' ')}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                        </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
