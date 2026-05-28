@@ -544,6 +544,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                           onChange={(e) => setCommentStatus(comment.id, e.target.value as any)}
                           onClick={(e) => e.stopPropagation()}
                           className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border-0 outline-none cursor-pointer ${STATUS_COLORS[comment.status] || STATUS_COLORS.open}`}
+                          style={{ colorScheme: 'dark' }}
                           title="Set comment status"
                           aria-label="Comment status"
                         >
