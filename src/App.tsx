@@ -22,7 +22,11 @@ import { InviteAccept } from './components/InviteAccept';
 import { CommandTerminal } from './components/CommandTerminal';
 import { AudioSpectrumWindow } from './components/AudioSpectrumWindow';
 import { CheatSheetBar } from './components/CheatSheetBar';
+import { checkBrowserCompat } from './lib/browserCompat';
 import { Users, LayoutDashboard } from 'lucide-react';
+
+const compatIssues = checkBrowserCompat();
+const criticalCompatIssues = compatIssues.filter(i => i.severity === 'error');
 import { motion, AnimatePresence } from 'motion/react';
 
 const ZOOM_IN_FACTOR = 1.1;
@@ -435,6 +439,11 @@ export default function App() {
       onContextMenu={(e) => e.preventDefault()}
     >
       <FollowPlayheadLogic />
+      {criticalCompatIssues.length > 0 && (
+        <div className="bg-rose-500/20 border-b border-rose-500/30 px-4 py-1.5 text-[9px] text-rose-300 font-black uppercase tracking-widest shrink-0">
+          {criticalCompatIssues.map(i => i.message).join(' · ')}
+        </div>
+      )}
       <Toolbar
         onToggleCollaboration={() => setShowCollaboration(!showCollaboration)}
         isCollaborationOpen={showCollaboration}

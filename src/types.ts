@@ -16,6 +16,16 @@ export interface ActivityEvent {
   payload: Record<string, unknown>;
 }
 
+export interface Reply {
+  id: string;
+  commentId: string;
+  text: string;
+  userId: string;
+  userName: string;
+  createdAt: number;
+  mentions?: string[];
+}
+
 export interface Comment {
   id: string;
   trackId: string;
@@ -27,6 +37,7 @@ export interface Comment {
   createdAt: number;
   mentions?: string[];
   tags?: string[];
+  replies?: Reply[];
 }
 
 export interface Clip {
@@ -118,6 +129,7 @@ export interface DAWState {
   setCommentDraft: (draft: { trackId: string; timestamp: number } | null) => void;
   addActivityEvent: (event: Omit<ActivityEvent, 'id'>) => void;
   markCommentsSeen: (ids: string[]) => void;
+  addReply: (commentId: string, text: string) => string;
   addEmptyTrack: (name: string) => string;
   addTrack: (buffer: AudioBuffer, name: string, audioData?: ArrayBuffer, offset?: number) => void;
   splitTrack: (trackId: string, timestamp: number) => void;

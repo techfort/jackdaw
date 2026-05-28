@@ -115,7 +115,11 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
     currentUser,
     markCommentsSeen,
   } = useStore();
+  const addReply = useStore(state => state.addReply);
   const [activeTab, setActiveTab] = useState<'comments' | 'members' | 'activity'>('comments');
+  const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [expandedReplyIds, setExpandedReplyIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (activeTab === 'comments') {
@@ -227,6 +231,22 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
       case 'Engineer': return <Target size={8} className="text-blue-400" />;
       default: return <UserIcon size={8} className="text-white/20" />;
     }
+  };
+
+  const toggleReplies = (commentId: string) => {
+    setExpandedReplyIds(prev => {
+      const next = new Set(prev);
+      next.has(commentId) ? next.delete(commentId) : next.add(commentId);
+      return next;
+    });
+  };
+
+  const handleSubmitReply = (e: React.FormEvent, commentId: string) => {
+    e.preventDefault();
+    if (!replyText.trim()) return;
+    addReply(commentId, replyText.trim());
+    setReplyText('');
+    setActiveReplyId(null);
   };
 
   const container = {
@@ -555,6 +575,73 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                     </div>
 
                     {renderCommentText(comment.text, comment.status === 'approved')}
+
+                    {/* Replies */}
+                    {((comment.replies?.length ?? 0) > 0 || activeReplyId === comment.id) && (
+                      <div className="mb-3">
+                        {(comment.replies?.length ?? 0) > 0 && (
+                          <button
+                            onClick={() => toggleReplies(comment.id)}
+                            className="text-[9px] font-black uppercase tracking-widest text-white/30 hover:text-[var(--color-accent)] mb-2 flex items-center gap-1 transition-colors"
+                          >
+                            <MessageSquare size={9} />
+                            {comment.replies!.length} {comment.replies!.length === 1 ? 'reply' : 'replies'}
+                            <ChevronRight size={9} className={`transition-transform ${expandedReplyIds.has(comment.id) ? 'rotate-90' : ''}`} />
+                          </button>
+                        )}
+                        {expandedReplyIds.has(comment.id) && (
+                          <div className="space-y-2 pl-3 border-l border-white/10 mb-2">
+                            {comment.replies!.map(reply => (
+                              <div key={reply.id} className="flex gap-2 items-start">
+                                <div className={`w-5 h-5 rounded-md ${getUserColor(reply.userId)} flex items-center justify-center shrink-0 border border-white/10`}>
+                                  <span className="text-[8px] font-black text-white">{reply.userName.charAt(0).toUpperCase()}</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-[9px] font-black text-white/60 mr-1.5">{reply.userName}</span>
+                                  <p className="text-[10px] text-white/70 leading-snug">
+                                    {parseSegments(reply.text).map((seg, i) => {
+                                      if (seg.type === 'mention') return <span key={i} className="text-amber-400 font-bold">{seg.value}</span>;
+                                      if (seg.type === 'tag') return <span key={i} className="text-blue-400 font-bold">{seg.value}</span>;
+                                      return <span key={i}>{seg.value}</span>;
+                                    })}
+                                  </p>
+                                </div>
+                                <span className="text-[8px] text-white/20 font-mono shrink-0">{format(reply.createdAt, 'HH:mm')}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {activeReplyId === comment.id && (
+                          <form onSubmit={(e) => handleSubmitReply(e, comment.id)} className="flex gap-2 mt-1">
+                            <input
+                              type="text"
+                              value={replyText}
+                              onChange={e => setReplyText(e.target.value)}
+                              placeholder="Write a reply..."
+                              autoFocus
+                              className="flex-1 bg-black/40 border border-white/10 rounded-lg py-1.5 px-3 text-[10px] focus:outline-none focus:border-[var(--color-accent)]/50 placeholder:text-white/20"
+                            />
+                            <button type="submit" className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-[9px] font-black uppercase text-white transition-colors">Send</button>
+                            <button type="button" onClick={() => { setActiveReplyId(null); setReplyText(''); }} className="px-2 py-1 text-white/30 hover:text-white rounded-lg text-[9px] font-black uppercase transition-colors">Cancel</button>
+                          </form>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Reply button — shown when comment is open */}
+                    {comment.status !== 'approved' && activeReplyId !== comment.id && (
+                      <button
+                        onClick={() => {
+                          setActiveReplyId(comment.id);
+                          if ((comment.replies?.length ?? 0) > 0) {
+                            setExpandedReplyIds(prev => new Set([...prev, comment.id]));
+                          }
+                        }}
+                        className="text-[9px] font-black uppercase tracking-widest text-white/20 hover:text-[var(--color-accent)] mb-3 flex items-center gap-1 transition-colors"
+                      >
+                        <MessageSquare size={9} /> Reply
+                      </button>
+                    )}
 
                     <div className="flex items-center justify-between mt-auto">
                       <div className="flex items-center gap-2">

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import React, { useMemo } from 'react';
 import { getSharedAudioContext } from './lib/sharedAudioContext';
-import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind } from './types';
+import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind, Reply } from './types';
 import { ConcurrentUpdateError } from './services/storage/types';
 import { storageService, authService } from './services/storage';
 import { parseMentions, parseTags } from './lib/mentionUtils';
@@ -83,6 +83,22 @@ export const useStore = create<DAWState>((set, get) => {
       set((state) => ({
         seenCommentIds: [...new Set([...state.seenCommentIds, ...ids])],
       }));
+    },
+
+    addReply: (commentId, text) => {
+      const user = get().currentUser;
+      const userId = user?.id || 'anonymous';
+      const userName = user?.name || 'Musician';
+      const id = generateId();
+      const reply: Reply = { id, commentId, text, userId, userName, createdAt: Date.now(), mentions: parseMentions(text) };
+      pushToHistory();
+      set((state) => ({
+        comments: state.comments.map(c => c.id === commentId ? { ...c, replies: [...(c.replies || []), reply] } : c),
+        canUndo: true,
+      }));
+      get().addActivityEvent({ kind: 'comment_added', actor: { userId, userName }, timestamp: Date.now(), payload: { commentId, replyId: id, text: text.slice(0, 100), isReply: true } });
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+      return id;
     },
 
     setCurrentUser: (user) => set({ currentUser: user }),

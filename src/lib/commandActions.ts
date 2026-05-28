@@ -2,6 +2,7 @@ import { useStore } from '../store';
 import { TrackData } from '../types';
 import { storageService } from '../services/storage';
 import { exportMixdown } from './exportUtils';
+import { checkBrowserCompat } from './browserCompat';
 
 let _punchInTrigger: (() => void) | null = null;
 
@@ -391,6 +392,19 @@ export const showActivity = (rawN?: string): CommandResult => {
   return { ok: true, message: lines.join('\n') };
 };
 
+export const replyToComment = (args: string): CommandResult => {
+  const match = args.match(/^(\S+)\s+"([\s\S]+)"$/);
+  if (!match) return { ok: false, message: 'Usage: reply <id> "text"' };
+  const [, rawId, text] = match;
+  const state = useStore.getState();
+  const id = rawId.replace(/^#/, '');
+  const target = state.comments.find(c => c.id === id);
+  if (!target) return { ok: false, message: `Comment not found: ${rawId}` };
+  if (typeof (state as any).addReply !== 'function') return { ok: false, message: 'Reply not available.' };
+  (state as any).addReply(id, text);
+  return { ok: true, message: `Reply added to comment #${id}.` };
+};
+
 export const exportFromCommand = async (selectionOnly: boolean): Promise<CommandResult> => {
   const state = useStore.getState();
   if (!state.tracks?.length) {
@@ -564,8 +578,20 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
     return showActivity(match[1]);
   }
 
+  match = command.match(/^reply\s+(.+)$/i);
+  if (match) {
+    return replyToComment(match[1]);
+  }
+
+  if (/^compat$/i.test(command)) {
+    const issues = checkBrowserCompat();
+    if (issues.length === 0) return { ok: true, message: 'Browser compatibility: all required APIs available.' };
+    const lines = issues.map(i => `[${i.severity.toUpperCase()}] ${i.feature}: ${i.message}`);
+    return { ok: true, message: lines.join('\n') };
+  }
+
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu/volup, vd/voldown, c:, invite, e, e stem, punchin, spectrum, click/metronome, unread, activity [n], +, -, ++, --',
+    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu/volup, vd/voldown, c:, reply, invite, e, e stem, punchin, spectrum, click/metronome, unread, activity [n], compat, +, -, ++, --',
   };
 };
