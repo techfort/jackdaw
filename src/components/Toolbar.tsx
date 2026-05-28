@@ -307,6 +307,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
             <Save size={15} />
           </button>
           {divider}
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            className="p-1.5 rounded transition-all hover:bg-white/10 text-[var(--color-text-muted)] disabled:opacity-20"
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo size={15} />
+          </button>
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            className="p-1.5 rounded transition-all hover:bg-white/10 text-[var(--color-text-muted)] disabled:opacity-20"
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            <Redo size={15} />
+          </button>
+          {divider}
           <input
             ref={punchInRef}
             type="file"

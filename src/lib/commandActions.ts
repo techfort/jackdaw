@@ -23,6 +23,40 @@ export type CommandResult = {
   message: string;
 };
 
+const COMMAND_HELP: Record<string, string> = {
+  'add track': 'add track [name] — create a new empty track',
+  'rm track': 'rm track [id|name] — remove the selected or named track',
+  'rm c': 'rm c <id> — remove comment by id',
+  'sel': 'sel <id|name> — select a track by id or name',
+  'go': 'go <time> — seek to time in seconds (e.g. go 32.5)',
+  'ff': 'ff [n] — fast-forward by n seconds (default 5)',
+  'rw': 'rw [n] — rewind by n seconds (default 5)',
+  's': 's [id|name] — solo track (toggle)',
+  'm': 'm [id|name] — mute track (toggle)',
+  'vu': 'vu [id|name] — raise volume by 10%',
+  'volup': 'volup [id|name] — raise volume by 10%',
+  'vd': 'vd [id|name] — lower volume by 10%',
+  'voldown': 'voldown [id|name] — lower volume by 10%',
+  'c:': 'c: <text> — add a comment at the current playhead position',
+  'reply': 'reply <id> "text" — add a threaded reply to comment #id',
+  'freeze': 'freeze <id|name> — freeze track (owner only)',
+  'unfreeze': 'unfreeze <id|name> — unfreeze track (owner only)',
+  'invite': 'invite <email> [role] — invite a collaborator (role: editor|viewer)',
+  'e': 'e — export full mixdown as WAV',
+  'e stem': 'e stem <id|name> — export a single track stem as WAV',
+  'punchin': 'punchin — open file picker to punch in audio at playhead',
+  'spectrum': 'spectrum — toggle spectrum analyser panel',
+  'click': 'click — toggle metronome/click track',
+  'metronome': 'metronome — toggle metronome/click track',
+  'unread': 'unread — list unread open comments',
+  'activity': 'activity [n] — show last n activity events (default 10)',
+  'compat': 'compat — check browser API compatibility',
+  '+': '+ — zoom in',
+  '-': '- — zoom out',
+  '++': '++ — zoom in more',
+  '--': '-- — zoom out more',
+};
+
 const BEATS_PER_BAR = 4;
 const ZOOM_IN_FACTOR = 1.1;
 const ZOOM_OUT_FACTOR = 0.9;
@@ -620,8 +654,20 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
     return unfreezeTrack(match[1]);
   }
 
+  if (/^help$/i.test(command)) {
+    return { ok: true, message: Object.values(COMMAND_HELP).join('\n') };
+  }
+
+  match = command.match(/^help\s+(.+)$/i);
+  if (match) {
+    const query = match[1].trim().toLowerCase();
+    const key = Object.keys(COMMAND_HELP).find(k => k.toLowerCase() === query);
+    if (key) return { ok: true, message: COMMAND_HELP[key] };
+    return { ok: false, message: `No help for "${query}". Type "help" for all commands.` };
+  }
+
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu/volup, vd/voldown, c:, reply, freeze, unfreeze, invite, e, e stem, punchin, spectrum, click/metronome, unread, activity [n], compat, +, -, ++, --',
+    message: 'Unknown command. Type "help" for a list of commands.',
   };
 };
