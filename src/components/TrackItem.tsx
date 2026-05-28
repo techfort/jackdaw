@@ -206,24 +206,20 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
         <div className="flex items-center gap-2">
           <div className="flex gap-1">
             <button
-              disabled={!canEdit}
               onClick={() => {
-                if (!canEdit) return;
                 if (track.isMuted) updateTrack(track.id, { isMuted: false });
                 else muteTrackByReference(track.id);
               }}
-              className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${!canEdit ? 'opacity-30 cursor-not-allowed' : ''} ${track.isMuted ? 'bg-[var(--color-accent-purple)]/20 border-[var(--color-accent-purple)] text-[var(--color-accent-purple)]' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
+              className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isMuted ? 'bg-[var(--color-accent-purple)]/20 border-[var(--color-accent-purple)] text-[var(--color-accent-purple)]' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               M
             </button>
             <button
-              disabled={!canEdit}
               onClick={() => {
-                if (!canEdit) return;
                 if (track.isSoloed) updateTrack(track.id, { isSoloed: false });
                 else soloTrackByReference(track.id);
               }}
-              className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${!canEdit ? 'opacity-30 cursor-not-allowed' : ''} ${track.isSoloed ? 'bg-[var(--color-accent)] border-black text-black' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
+              className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isSoloed ? 'bg-[var(--color-accent)] border-black text-black' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               S
             </button>

@@ -480,9 +480,13 @@ export const useStore = create<DAWState>((set, get) => {
     updateTrack: (id, updates, silent = false) => {
       const { currentUser, currentUserRole } = get();
       const track = get().tracks.find(t => t.id === id);
-      if (track?.isFrozen && !('isFrozen' in updates)) {
-        const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
-        if (!canManage) return;
+      if (track?.isFrozen) {
+        const freezeExempt = new Set(['isMuted', 'isSoloed', 'isFrozen']);
+        const hasRestrictedKeys = Object.keys(updates).some(k => !freezeExempt.has(k));
+        if (hasRestrictedKeys) {
+          const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
+          if (!canManage) return;
+        }
       }
       if (!silent) pushToHistory();
       set((state) => ({
