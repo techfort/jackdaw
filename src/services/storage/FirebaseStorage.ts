@@ -398,9 +398,10 @@ export class FirebaseStorageService implements StorageService {
   async updatePresence(projectId: string, songId: string, cursorPosition: number): Promise<void> {
     if (!auth.currentUser) return;
     const presenceId = auth.currentUser.uid;
+    const userId = auth.currentUser.email || presenceId;
     try {
       await setDoc(doc(db, 'presence', presenceId), {
-        userId: presenceId,
+        userId,
         userName: auth.currentUser.displayName || `Collaborator ${presenceId.slice(0, 4)}`,
         projectId,
         songId,
