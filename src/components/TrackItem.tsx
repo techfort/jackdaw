@@ -7,7 +7,9 @@ import {
   CheckCircle2,
   Circle,
   Clock,
-  User as UserIcon
+  User as UserIcon,
+  Lock,
+  LockOpen,
 } from 'lucide-react';
 import { useStore } from '../store';
 import { TrackData } from '../types';
@@ -28,6 +30,9 @@ interface TrackItemProps {
 
 export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const updateTrack = useStore(state => state.updateTrack);
+  const toggleFreezeTrack = useStore(state => state.toggleFreezeTrack);
+  const currentUser = useStore(state => state.currentUser);
+  const currentUserRole = useStore(state => state.currentUserRole);
   const zoom = useStore(state => state.zoom);
   const snapEnabled = useStore(state => state.snapEnabled);
   const tempo = useStore(state => state.tempo);
@@ -132,6 +137,9 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
     });
   };
 
+  const canManageFreeze = currentUser?.id === track.ownerId || currentUserRole === 'owner';
+  const canEdit = !track.isFrozen || canManageFreeze;
+
   const handleInteraction = (e: React.MouseEvent) => {
     setSelectedTrackId(track.id);
     if (!waveformContainerRef.current) return;
@@ -156,69 +164,93 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
       onClick={() => selectTrackByReference(track.id)}
     >
       {/* Controls - Sticky Left */}
-      <div className={`w-64 border-r border-[var(--color-border-main)] p-4 flex flex-col justify-between shrink-0 z-20 track-controls sticky left-0 shadow-2xl transition-colors duration-200 ${isSelected ? 'bg-[var(--color-bg-sidebar)]' : 'bg-[var(--color-bg-sidebar)] opacity-80'}`}>
+      <div className={`w-64 border-r border-[var(--color-border-main)] p-4 flex flex-col justify-between shrink-0 z-20 track-controls sticky left-0 shadow-2xl transition-colors duration-200 ${isSelected ? 'bg-[var(--color-bg-sidebar)]' : 'bg-[var(--color-bg-sidebar)] opacity-80'} ${track.isFrozen ? 'border-l-2 border-l-sky-500/60' : ''}`}>
         {isSelected && <div className="absolute inset-y-0 left-0 w-1 bg-[var(--color-accent)] z-30" />}
         <div className="flex items-start justify-between gap-1 overflow-hidden">
           <div className="flex flex-col overflow-hidden">
-            <span className="text-xs font-bold text-white truncate">{track.name}</span>
+            <div className="flex items-center gap-1">
+              {track.isFrozen && <Lock size={10} className="text-sky-400 shrink-0" />}
+              <span className="text-xs font-bold text-white truncate">{track.name}</span>
+            </div>
             <span className="text-[10px] text-[var(--color-text-dark)] font-mono tracking-tight uppercase">Stem {track.id.slice(0, 4)}</span>
           </div>
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button 
-              onClick={() => handleAddComment()} 
+            {canManageFreeze && (
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleFreezeTrack(track.id); }}
+                className={`p-1.5 rounded transition-colors ${track.isFrozen ? 'text-sky-400 hover:text-sky-300 hover:bg-[var(--color-bg-input)]' : 'text-[var(--color-text-muted)] hover:text-sky-400 hover:bg-[var(--color-bg-input)]'}`}
+                title={track.isFrozen ? 'Unfreeze track' : 'Freeze track'}
+              >
+                {track.isFrozen ? <LockOpen size={14} /> : <Lock size={14} />}
+              </button>
+            )}
+            <button
+              onClick={() => handleAddComment()}
               className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-input)] rounded transition-colors"
               title="Add comment at playhead"
             >
               <MessageSquarePlus size={14} />
             </button>
-            <button 
-              onClick={() => removeTrackByReference(track.id)} 
-              className="p-1.5 text-[var(--color-text-dark)] hover:text-red-500 hover:bg-[var(--color-bg-input)] rounded transition-colors"
-              title="Remove track"
-            >
-              <Trash2 size={14} />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => removeTrackByReference(track.id)}
+                className="p-1.5 text-[var(--color-text-dark)] hover:text-red-500 hover:bg-[var(--color-bg-input)] rounded transition-colors"
+                title="Remove track"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <div className="flex gap-1">
-            <button 
+            <button
+              disabled={!canEdit}
               onClick={() => {
+                if (!canEdit) return;
                 if (track.isMuted) updateTrack(track.id, { isMuted: false });
                 else muteTrackByReference(track.id);
               }}
-              className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isMuted ? 'bg-[var(--color-accent-purple)]/20 border-[var(--color-accent-purple)] text-[var(--color-accent-purple)]' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
+              className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${!canEdit ? 'opacity-30 cursor-not-allowed' : ''} ${track.isMuted ? 'bg-[var(--color-accent-purple)]/20 border-[var(--color-accent-purple)] text-[var(--color-accent-purple)]' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               M
             </button>
-            <button 
+            <button
+              disabled={!canEdit}
               onClick={() => {
+                if (!canEdit) return;
                 if (track.isSoloed) updateTrack(track.id, { isSoloed: false });
                 else soloTrackByReference(track.id);
               }}
-              className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isSoloed ? 'bg-[var(--color-accent)] border-black text-black' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
+              className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${!canEdit ? 'opacity-30 cursor-not-allowed' : ''} ${track.isSoloed ? 'bg-[var(--color-accent)] border-black text-black' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               S
             </button>
           </div>
-          <span className="text-[9px] text-[var(--color-text-dark)] uppercase font-bold italic ml-auto opacity-0 group-hover:opacity-100">
-            Shift+Click to Comment
-          </span>
+          {track.isFrozen && !canManageFreeze && (
+            <span className="text-[9px] text-sky-400/70 uppercase font-bold tracking-tight ml-auto">Read-only</span>
+          )}
+          {(!track.isFrozen || canManageFreeze) && (
+            <span className="text-[9px] text-[var(--color-text-dark)] uppercase font-bold italic ml-auto opacity-0 group-hover:opacity-100">
+              Shift+Click to Comment
+            </span>
+          )}
         </div>
 
         <div className="space-y-1">
           <div className="relative h-2 bg-[var(--color-bg-input)] rounded-full overflow-hidden border border-[var(--color-border-main)]">
-            <div 
-               className="h-full bg-gradient-to-r from-[var(--color-accent-purple)] to-[var(--color-accent)] transition-all duration-150" 
-               style={{ width: `${track.volume * 100}%` }} 
+            <div
+               className="h-full bg-gradient-to-r from-[var(--color-accent-purple)] to-[var(--color-accent)] transition-all duration-150"
+               style={{ width: `${track.volume * 100}%` }}
             />
-            <input 
-              type="range" 
+            <input
+              type="range"
               min="0" max="1" step="0.01"
               value={track.volume}
-              onChange={(e) => updateTrack(track.id, { volume: parseFloat(e.target.value) })}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full"
+              disabled={!canEdit}
+              onChange={(e) => { if (canEdit) updateTrack(track.id, { volume: parseFloat(e.target.value) }); }}
+              className={`absolute inset-0 opacity-0 w-full ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed'}`}
             />
           </div>
           <div className="flex justify-between text-[9px] font-mono text-[var(--color-text-muted)] uppercase tracking-tighter">
@@ -248,13 +280,14 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             : (isClipMuted ? 'var(--color-text-dark)' : 'var(--color-accent)');
 
           return (
-            <div 
+            <div
               key={clip.id}
               className={`h-[80px] my-[16px] absolute rounded border group/clip transition-all ${
-                activeTool === 'scissors' ? 'cursor-crosshair active:scale-y-95' : 
-                activeTool === 'mute' ? 'cursor-pointer' : 
+                !canEdit ? 'cursor-not-allowed' :
+                activeTool === 'scissors' ? 'cursor-crosshair active:scale-y-95' :
+                activeTool === 'mute' ? 'cursor-pointer' :
                 'cursor-move'
-              } ${isSelected ? 'bg-[var(--color-accent)] border-black/40 z-10' : 'bg-[var(--color-accent)]/5 border-[var(--color-accent)]/20'}`}
+              } ${isSelected ? 'bg-[var(--color-accent)] border-black/40 z-10' : 'bg-[var(--color-accent)]/5 border-[var(--color-accent)]/20'} ${track.isFrozen && !canEdit ? 'opacity-60' : ''}`}
               style={{ 
                 left: (Number(clip.offset) || 0) * (Number(zoom) || 100),
                 width: (Number(clip.duration) || 0) * (Number(zoom) || 100),
@@ -262,7 +295,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
               }}
               onMouseDown={(e) => {
                 selectTrackByReference(track.id);
-                if (e.button !== 0 || e.shiftKey) return;
+                if (!canEdit || e.button !== 0 || e.shiftKey) return;
                 e.stopPropagation();
 
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -380,15 +413,17 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             <div className="absolute top-0 right-0 bottom-0 w-2 cursor-col-resize hover:bg-white/10" />
 
             {/* Clip actions Overlay */}
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                useStore.getState().removeClip(track.id, clip.id);
-              }}
-              className="absolute -top-2 -right-2 w-5 h-5 bg-black border border-[var(--color-border-main)] rounded-full items-center justify-center hidden group-hover/clip:flex hover:bg-red-500 hover:text-white transition-colors"
-            >
-              <Trash2 size={10} />
-            </button>
+            {canEdit && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  useStore.getState().removeClip(track.id, clip.id);
+                }}
+                className="absolute -top-2 -right-2 w-5 h-5 bg-black border border-[var(--color-border-main)] rounded-full items-center justify-center hidden group-hover/clip:flex hover:bg-red-500 hover:text-white transition-colors"
+              >
+                <Trash2 size={10} />
+              </button>
+            )}
           </div>
         );
       })}

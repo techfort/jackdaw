@@ -392,6 +392,26 @@ export const showActivity = (rawN?: string): CommandResult => {
   return { ok: true, message: lines.join('\n') };
 };
 
+export const freezeTrack = (args: string): CommandResult => {
+  const state = useStore.getState();
+  const id = args.trim();
+  const track = state.tracks.find(t => t.id === id || t.name === id);
+  if (!track) return { ok: false, message: `Track not found: ${id}` };
+  if (track.isFrozen) return { ok: false, message: `Track "${track.name}" is already frozen.` };
+  state.toggleFreezeTrack(track.id);
+  return { ok: true, message: `Track "${track.name}" frozen.` };
+};
+
+export const unfreezeTrack = (args: string): CommandResult => {
+  const state = useStore.getState();
+  const id = args.trim();
+  const track = state.tracks.find(t => t.id === id || t.name === id);
+  if (!track) return { ok: false, message: `Track not found: ${id}` };
+  if (!track.isFrozen) return { ok: false, message: `Track "${track.name}" is not frozen.` };
+  state.toggleFreezeTrack(track.id);
+  return { ok: true, message: `Track "${track.name}" unfrozen.` };
+};
+
 export const replyToComment = (args: string): CommandResult => {
   const match = args.match(/^(\S+)\s+"([\s\S]+)"$/);
   if (!match) return { ok: false, message: 'Usage: reply <id> "text"' };
@@ -590,8 +610,18 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
     return { ok: true, message: lines.join('\n') };
   }
 
+  match = command.match(/^freeze\s+(.+)$/i);
+  if (match) {
+    return freezeTrack(match[1]);
+  }
+
+  match = command.match(/^unfreeze\s+(.+)$/i);
+  if (match) {
+    return unfreezeTrack(match[1]);
+  }
+
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu/volup, vd/voldown, c:, reply, invite, e, e stem, punchin, spectrum, click/metronome, unread, activity [n], compat, +, -, ++, --',
+    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu/volup, vd/voldown, c:, reply, freeze, unfreeze, invite, e, e stem, punchin, spectrum, click/metronome, unread, activity [n], compat, +, -, ++, --',
   };
 };

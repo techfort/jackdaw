@@ -335,6 +335,7 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     addTrack: (buffer, name, audioData, offset = 0) => {
+      const ownerId = get().currentUser?.id || 'anonymous';
       pushToHistory();
       set((state) => ({
         tracks: [...state.tracks, {
@@ -345,6 +346,8 @@ export const useStore = create<DAWState>((set, get) => {
           volume: 0.8,
           isMuted: false,
           isSoloed: false,
+          isFrozen: false,
+          ownerId,
           createdAt: Date.now(),
           clips: [{
             id: generateId(),
@@ -364,6 +367,7 @@ export const useStore = create<DAWState>((set, get) => {
     addEmptyTrack: (name) => {
       const trimmedName = (name || '').trim() || `Track ${get().tracks.length + 1}`;
       const newTrackId = generateId();
+      const ownerId = get().currentUser?.id || 'anonymous';
       pushToHistory();
       set((state) => ({
         tracks: [...state.tracks, {
@@ -372,6 +376,8 @@ export const useStore = create<DAWState>((set, get) => {
           volume: 0.8,
           isMuted: false,
           isSoloed: false,
+          isFrozen: false,
+          ownerId,
           createdAt: Date.now(),
           clips: [{
             id: generateId(),
@@ -390,6 +396,12 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     splitTrack: (trackId, timelineTime) => {
+      const { currentUser, currentUserRole } = get();
+      const frozen = get().tracks.find(t => t.id === trackId);
+      if (frozen?.isFrozen) {
+        const canManage = currentUser?.id === frozen.ownerId || currentUserRole === 'owner';
+        if (!canManage) return;
+      }
       pushToHistory();
       set((state) => {
         const track = state.tracks.find(t => t.id === trackId);
@@ -429,8 +441,31 @@ export const useStore = create<DAWState>((set, get) => {
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
+    toggleFreezeTrack: (id) => {
+      const { currentUser, currentUserRole } = get();
+      const track = get().tracks.find(t => t.id === id);
+      if (!track) return;
+      const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
+      if (!canManage) return;
+      const nowFrozen = !track.isFrozen;
+      get().updateTrack(id, { isFrozen: nowFrozen });
+      const u = currentUser;
+      get().addActivityEvent({
+        kind: nowFrozen ? 'track_frozen' : 'track_unfrozen',
+        actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' },
+        timestamp: Date.now(),
+        payload: { trackId: id, trackName: track.name },
+      });
+    },
+
     removeTrack: (id) => {
-      const trackName = get().tracks.find(t => t.id === id)?.name;
+      const { currentUser, currentUserRole } = get();
+      const track = get().tracks.find(t => t.id === id);
+      if (track?.isFrozen) {
+        const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
+        if (!canManage) return;
+      }
+      const trackName = track?.name;
       pushToHistory();
       set((state) => ({
         tracks: state.tracks.filter(t => t.id !== id),
@@ -443,6 +478,12 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     updateTrack: (id, updates, silent = false) => {
+      const { currentUser, currentUserRole } = get();
+      const track = get().tracks.find(t => t.id === id);
+      if (track?.isFrozen && !('isFrozen' in updates)) {
+        const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
+        if (!canManage) return;
+      }
       if (!silent) pushToHistory();
       set((state) => ({
         tracks: state.tracks.map(t => t.id === id ? { ...t, ...updates } : t),
@@ -452,6 +493,12 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     updateClip: (trackId, clipId, updates, silent = false) => {
+      const { currentUser, currentUserRole } = get();
+      const track = get().tracks.find(t => t.id === trackId);
+      if (track?.isFrozen) {
+        const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
+        if (!canManage) return;
+      }
       if (!silent) pushToHistory();
       set((state) => ({
         tracks: state.tracks.map(t => {
@@ -467,6 +514,12 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     removeClip: (trackId, clipId) => {
+      const { currentUser, currentUserRole } = get();
+      const track = get().tracks.find(t => t.id === trackId);
+      if (track?.isFrozen) {
+        const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
+        if (!canManage) return;
+      }
       pushToHistory();
       set((state) => ({
         tracks: state.tracks.map(t => {

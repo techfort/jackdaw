@@ -6,7 +6,9 @@ export type ActivityEventKind =
   | 'comment_reopened'
   | 'comment_status_changed'
   | 'track_added'
-  | 'track_removed';
+  | 'track_removed'
+  | 'track_frozen'
+  | 'track_unfrozen';
 
 export interface ActivityEvent {
   id: string;
@@ -59,6 +61,8 @@ export interface TrackData {
   isSoloed: boolean;
   clips: Clip[];
   createdAt?: number;
+  ownerId?: string;
+  isFrozen?: boolean;
 }
 
 export type TimelineMode = 'time' | 'beats';
@@ -130,6 +134,7 @@ export interface DAWState {
   addActivityEvent: (event: Omit<ActivityEvent, 'id'>) => void;
   markCommentsSeen: (ids: string[]) => void;
   addReply: (commentId: string, text: string) => string;
+  toggleFreezeTrack: (id: string) => void;
   addEmptyTrack: (name: string) => string;
   addTrack: (buffer: AudioBuffer, name: string, audioData?: ArrayBuffer, offset?: number) => void;
   splitTrack: (trackId: string, timestamp: number) => void;
