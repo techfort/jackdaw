@@ -1,5 +1,4 @@
 import {
-  signInAnonymously,
   signOut,
   onAuthStateChanged,
   updateProfile as firebaseUpdateProfile,
@@ -113,15 +112,6 @@ export class FirebaseAuthService implements AuthService {
       };
     }
     return null;
-  }
-
-  async anonymousSignIn(): Promise<User> {
-    const result = await signInAnonymously(auth);
-    return {
-      id: result.user.uid,
-      name: `Collaborator ${result.user.uid.slice(0, 4)}`,
-      isAnonymous: true
-    };
   }
 
   async signOut(): Promise<void> {

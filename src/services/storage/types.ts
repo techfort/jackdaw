@@ -67,7 +67,7 @@ export interface AuthService {
   getCurrentUser(): User | null;
   onAuthStateChanged(callback: (user: User | null) => void): () => void;
   signInMagicLink(email: string, displayName?: string): Promise<void>;
-  anonymousSignIn(): Promise<User>;
+  anonymousSignIn?(): Promise<User>;
   signOut(): Promise<void>;
   updateProfile(name: string): Promise<void>;
 }

@@ -274,7 +274,7 @@ export default function App() {
     } else {
       // Local mode: auto-sign in anonymously if no user
       if (!authService.getCurrentUser()) {
-        authService.anonymousSignIn().catch(console.error);
+        authService.anonymousSignIn?.().catch(console.error);
       }
     }
 
@@ -421,15 +421,6 @@ export default function App() {
               >
                 {isMagicLinkPending ? 'Complete Sign-in' : 'Send Sign-in Link'}
               </button>
-              {currentUser?.isAnonymous && (
-                <button
-                  type="button"
-                  onClick={() => setShowSignInGate(false)}
-                  className="w-full text-[10px] text-[var(--color-text-muted)] hover:text-white uppercase tracking-widest py-1 transition-colors"
-                >
-                  Continue without signing in
-                </button>
-              )}
             </form>
           )}
         </div>

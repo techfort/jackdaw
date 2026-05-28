@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
@@ -17,14 +17,6 @@ import firebaseConfig from '../../firebase-applet-config.json';
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
-
-// Initialize anonymous auth for collaborative identity
-export const initAuth = async () => {
-  if (!auth.currentUser) {
-    await signInAnonymously(auth);
-  }
-  return auth.currentUser;
-};
 
 // Test connection
 async function testConnection() {
