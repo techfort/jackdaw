@@ -371,6 +371,26 @@ export const inviteCollaboratorByEmail = async (emailRaw: string): Promise<Comma
   }
 };
 
+export const showUnread = (): CommandResult => {
+  const state = useStore.getState();
+  const unread = state.comments.filter(c => c.status !== 'approved' && !(state.seenCommentIds || []).includes(c.id));
+  if (unread.length === 0) return { ok: true, message: 'No unread notes.' };
+  const lines = unread.map(c => `#${c.id} [${c.status}] ${c.userName}: ${c.text.slice(0, 60)}`);
+  return { ok: true, message: `${unread.length} unread:\n${lines.join('\n')}` };
+};
+
+export const showActivity = (rawN?: string): CommandResult => {
+  const state = useStore.getState();
+  const n = Math.min(Math.max(1, parseInt(rawN || '10') || 10), 50);
+  const events = [...(state.activityEvents || [])].sort((a, b) => b.timestamp - a.timestamp).slice(0, n);
+  if (events.length === 0) return { ok: true, message: 'No activity yet.' };
+  const lines = events.map(e => {
+    const time = new Date(e.timestamp).toLocaleTimeString();
+    return `[${time}] ${e.actor.userName}: ${e.kind.replace(/_/g, ' ')}`;
+  });
+  return { ok: true, message: lines.join('\n') };
+};
+
 export const exportFromCommand = async (selectionOnly: boolean): Promise<CommandResult> => {
   const state = useStore.getState();
   if (!state.tracks?.length) {
@@ -535,8 +555,17 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
     };
   }
 
+  if (/^unread$/i.test(command)) {
+    return showUnread();
+  }
+
+  match = command.match(/^activity(?:\s+(\d+))?$/i);
+  if (match) {
+    return showActivity(match[1]);
+  }
+
   return {
     ok: false,
-    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu/volup, vd/voldown, c:, invite, e, e stem, punchin, spectrum, click/metronome, +, -, ++, --',
+    message: 'Unknown command. Use: add track, rm track, rm c, sel, go, ff, rw, s, m, vu/volup, vd/voldown, c:, invite, e, e stem, punchin, spectrum, click/metronome, unread, activity [n], +, -, ++, --',
   };
 };

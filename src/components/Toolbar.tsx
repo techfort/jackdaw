@@ -86,6 +86,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const setTool = useStore(state => state.setTool);
   const tracks = useStore(state => state.tracks);
   const comments = useStore(state => state.comments);
+  const seenCommentIds = useStore(state => state.seenCommentIds);
   const currentProjectId = useStore(state => state.currentProjectId);
   const currentProjectName = useStore(state => state.currentProjectName);
   const currentSongId = useStore(state => state.currentSongId);
@@ -225,6 +226,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
       exportMixdown(tracks);
     }
   };
+
+  const unreadCount = comments.filter(c => c.status !== 'approved' && !seenCommentIds.includes(c.id)).length;
+  const blockerCount = currentUser?.name
+    ? comments.filter(c => c.status !== 'approved' && (c.mentions || []).some(m => m.toLowerCase() === (currentUser.name || '').toLowerCase())).length
+    : 0;
 
   // Shared class fragments for consistency
   const iconBtn = (active?: boolean, activeClass = 'bg-[var(--color-accent)] text-black') =>
@@ -385,9 +391,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           <button onClick={() => setShowMixer(!showMixer)} className={textBtn(showMixer)}>
             <LayoutDashboard size={13} /> Mixer
           </button>
-          <button onClick={onToggleCollaboration} className={textBtn(isCollaborationOpen, 'bg-zinc-600 text-white shadow-lg')}>
-            <TrendingUp size={13} /> Hub
-          </button>
+          <div className="relative">
+            <button onClick={onToggleCollaboration} className={textBtn(isCollaborationOpen, 'bg-zinc-600 text-white shadow-lg')}>
+              <TrendingUp size={13} /> Hub
+            </button>
+            {!isCollaborationOpen && (unreadCount > 0 || blockerCount > 0) && (
+              <span className={`absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full text-[8px] font-black px-1 pointer-events-none ${blockerCount > 0 ? 'bg-rose-500 text-white' : 'bg-[var(--color-accent)] text-black'}`}>
+                {blockerCount > 0 ? blockerCount : unreadCount}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className={`${group} gap-0`}>

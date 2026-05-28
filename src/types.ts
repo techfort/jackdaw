@@ -1,5 +1,21 @@
 export type CommentStatus = 'open' | 'in_progress' | 'needs_review' | 'approved';
 
+export type ActivityEventKind =
+  | 'comment_added'
+  | 'comment_resolved'
+  | 'comment_reopened'
+  | 'comment_status_changed'
+  | 'track_added'
+  | 'track_removed';
+
+export interface ActivityEvent {
+  id: string;
+  kind: ActivityEventKind;
+  actor: { userId: string; userName: string };
+  timestamp: number;
+  payload: Record<string, unknown>;
+}
+
 export interface Comment {
   id: string;
   trackId: string;
@@ -69,6 +85,8 @@ export interface DAWState {
   isSyncing: boolean;
   remotePresences: any[];
   lastRemoteUpdate?: number;
+  activityEvents: ActivityEvent[];
+  seenCommentIds: string[];
   markers: { 1: number | null, 2: number | null };
   markerLabels: { 1: string; 2: string };
   selectedTrackId: string | null;
@@ -98,6 +116,8 @@ export interface DAWState {
   setFollowPlayhead: (follow: boolean) => void;
   setTool: (tool: 'select' | 'scissors' | 'mute') => void;
   setCommentDraft: (draft: { trackId: string; timestamp: number } | null) => void;
+  addActivityEvent: (event: Omit<ActivityEvent, 'id'>) => void;
+  markCommentsSeen: (ids: string[]) => void;
   addEmptyTrack: (name: string) => string;
   addTrack: (buffer: AudioBuffer, name: string, audioData?: ArrayBuffer, offset?: number) => void;
   splitTrack: (trackId: string, timestamp: number) => void;

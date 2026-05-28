@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import React, { useMemo } from 'react';
 import { getSharedAudioContext } from './lib/sharedAudioContext';
-import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus } from './types';
+import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind } from './types';
 import { ConcurrentUpdateError } from './services/storage/types';
 import { storageService, authService } from './services/storage';
 import { parseMentions, parseTags } from './lib/mentionUtils';
+import { logTelemetryEvent } from './lib/telemetry';
 
 
 interface HistoryState {
@@ -66,6 +67,23 @@ export const useStore = create<DAWState>((set, get) => {
     isSpectrumOpen: false,
     isClickEnabled: false,
     currentUser: null,
+    activityEvents: [],
+    seenCommentIds: [],
+
+    addActivityEvent: (event) => {
+      const id = generateId();
+      const full: ActivityEvent = { id, ...event };
+      logTelemetryEvent({ kind: event.kind, actor: event.actor, payload: event.payload });
+      set((state) => ({
+        activityEvents: [...state.activityEvents.slice(-499), full],
+      }));
+    },
+
+    markCommentsSeen: (ids) => {
+      set((state) => ({
+        seenCommentIds: [...new Set([...state.seenCommentIds, ...ids])],
+      }));
+    },
 
     setCurrentUser: (user) => set({ currentUser: user }),
     setSpectrumOpen: (open) => set({ isSpectrumOpen: open }),
@@ -322,6 +340,8 @@ export const useStore = create<DAWState>((set, get) => {
         }],
         canUndo: true
       }));
+      const u = get().currentUser;
+      get().addActivityEvent({ kind: 'track_added', actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { trackName: name } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
@@ -347,6 +367,8 @@ export const useStore = create<DAWState>((set, get) => {
         }],
         canUndo: true
       }));
+      const u = get().currentUser;
+      get().addActivityEvent({ kind: 'track_added', actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { trackName: trimmedName } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
       return newTrackId;
     },
@@ -392,12 +414,15 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     removeTrack: (id) => {
+      const trackName = get().tracks.find(t => t.id === id)?.name;
       pushToHistory();
       set((state) => ({
         tracks: state.tracks.filter(t => t.id !== id),
         comments: state.comments.filter(c => c.trackId !== id),
         canUndo: true
       }));
+      const u = get().currentUser;
+      get().addActivityEvent({ kind: 'track_removed', actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { trackId: id, trackName: trackName || '' } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
@@ -470,25 +495,36 @@ export const useStore = create<DAWState>((set, get) => {
         }],
         canUndo: true
       }));
+      const u2 = get().currentUser;
+      get().addActivityEvent({ kind: 'comment_added', actor: { userId: u2?.id || userId, userName: u2?.name || userName }, timestamp: Date.now(), payload: { commentId: nextCommentId, trackId, text: text.slice(0, 100), mentions: parseMentions(text), tags: parseTags(text) } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
       return nextCommentId;
     },
 
     toggleResolveComment: (id) => {
+      const prevStatus = get().comments.find(c => c.id === id)?.status;
       pushToHistory();
       set((state) => ({
         comments: state.comments.map(c => c.id === id ? { ...c, status: c.status === 'approved' ? 'open' : 'approved' } : c),
         canUndo: true
       }));
+      const newStatus = get().comments.find(c => c.id === id)?.status;
+      const u = get().currentUser;
+      const kind: ActivityEventKind = newStatus === 'approved' ? 'comment_resolved' : 'comment_reopened';
+      get().addActivityEvent({ kind, actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { commentId: id, from: prevStatus, to: newStatus } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
     setCommentStatus: (id, status) => {
+      const prevStatus = get().comments.find(c => c.id === id)?.status;
       pushToHistory();
       set((state) => ({
         comments: state.comments.map(c => c.id === id ? { ...c, status } : c),
         canUndo: true
       }));
+      const u = get().currentUser;
+      const kind: ActivityEventKind = status === 'approved' ? 'comment_resolved' : prevStatus === 'approved' ? 'comment_reopened' : 'comment_status_changed';
+      get().addActivityEvent({ kind, actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { commentId: id, from: prevStatus, to: status } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
@@ -499,6 +535,8 @@ export const useStore = create<DAWState>((set, get) => {
         comments: state.comments.map(c => idSet.has(c.id) ? { ...c, status: 'approved' as const } : c),
         canUndo: true
       }));
+      const u = get().currentUser;
+      get().addActivityEvent({ kind: 'comment_resolved', actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { commentIds: ids, count: ids.length } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 

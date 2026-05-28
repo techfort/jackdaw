@@ -432,4 +432,53 @@ describe('addCommentFromCommand auto track resolution', () => {
     expect(setSpectrumOpen).toHaveBeenCalledWith(false);
     expect(result.message).toContain('Closed');
   });
+
+  it('unread returns "No unread notes" when all comments are seen', async () => {
+    getStateMock.mockReturnValue({
+      comments: [{ id: '1', status: 'open', userName: 'Alice', text: 'Fix this' }],
+      seenCommentIds: ['1'],
+    });
+    const result = await executeTerminalCommand('unread');
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe('No unread notes.');
+  });
+
+  it('unread lists unseen open comments', async () => {
+    getStateMock.mockReturnValue({
+      comments: [
+        { id: '1', status: 'open', userName: 'Alice', text: 'Fix this' },
+        { id: '2', status: 'approved', userName: 'Bob', text: 'Done' },
+        { id: '3', status: 'in_progress', userName: 'Charlie', text: 'Working on it' },
+      ],
+      seenCommentIds: [],
+    });
+    const result = await executeTerminalCommand('unread');
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain('2 unread');
+    expect(result.message).toContain('#1');
+    expect(result.message).toContain('#3');
+    expect(result.message).not.toContain('#2');
+  });
+
+  it('activity returns "No activity yet" when log is empty', async () => {
+    getStateMock.mockReturnValue({ activityEvents: [] });
+    const result = await executeTerminalCommand('activity');
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe('No activity yet.');
+  });
+
+  it('activity shows recent events in reverse-chronological order', async () => {
+    getStateMock.mockReturnValue({
+      activityEvents: [
+        { id: 'a', kind: 'track_added', actor: { userId: 'u1', userName: 'Alice' }, timestamp: 1000, payload: {} },
+        { id: 'b', kind: 'comment_added', actor: { userId: 'u2', userName: 'Bob' }, timestamp: 2000, payload: {} },
+      ],
+    });
+    const result = await executeTerminalCommand('activity 5');
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain('Bob');
+    expect(result.message).toContain('comment added');
+    const lines = result.message.split('\n');
+    expect(lines[0]).toContain('Bob');
+  });
 });
