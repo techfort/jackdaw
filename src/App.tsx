@@ -296,10 +296,12 @@ export default function App() {
   const viewportRef = useRef<HTMLDivElement>(null);
 
   // Zoom and Scroll handlers
+  // Listener is on document (not viewportRef) so it works even when the viewport
+  // hasn't mounted yet (e.g. user opens a song from the ProjectDashboard after mount).
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       const viewport = viewportRef.current;
-      if (!viewport) return;
+      if (!viewport || !viewport.contains(e.target as Node)) return;
 
       if (e.ctrlKey || e.metaKey) {
         // Horizontal Move with Ctrl+Scrolling
@@ -315,15 +317,8 @@ export default function App() {
       }
     };
 
-    const viewport = viewportRef.current;
-    if (viewport) {
-      viewport.addEventListener('wheel', handleWheel, { passive: false });
-    }
-    return () => {
-      if (viewport) {
-        viewport.removeEventListener('wheel', handleWheel);
-      }
-    };
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    return () => document.removeEventListener('wheel', handleWheel);
   }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {

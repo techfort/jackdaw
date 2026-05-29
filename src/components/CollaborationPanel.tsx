@@ -542,8 +542,8 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-2">
-                       <div className="flex items-center gap-2 overflow-hidden">
-                        <span className="flex items-center gap-1.5 text-[9px] font-black text-[var(--color-accent)] uppercase tracking-widest truncate bg-[var(--color-accent)]/10 px-2 py-0.5 rounded border border-[var(--color-accent)]/10">
+                       <div className="flex items-center gap-2 min-w-0">
+                        <span className="flex items-center gap-1.5 text-[9px] font-black text-[var(--color-accent)] uppercase tracking-widest truncate min-w-0 bg-[var(--color-accent)]/10 px-2 py-0.5 rounded border border-[var(--color-accent)]/10">
                           <MessageSquare size={10} />
                           {getTrackName(comment.trackId)}
                         </span>
