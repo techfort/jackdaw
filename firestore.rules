@@ -26,7 +26,8 @@ service cloud.firestore {
 
     function isOwner(projectId) {
       return isAuthenticated() &&
-        get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == currentUserKey();
+        get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId
+          in [currentUserKey(), currentUserId()];
     }
 
     function canEdit(projectId) {
