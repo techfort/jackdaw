@@ -61,17 +61,16 @@ export class FirebaseStorageService implements StorageService {
       if (!snap.exists()) return null;
       const song = snap.data() as SongData;
 
-      // Fetch audio for any track that has a storagePath but no local audioData
+      // Restore audio for each track: check IDB cache first, then fetch from storagePath
       const { LocalStorageService } = await import('./LocalStorage');
       const localCache = new LocalStorageService();
 
       const tracksWithAudio = await Promise.all(
         (song.tracks || []).map(async (track: any) => {
-          if (track.storagePath && !track.audioData) {
-            const cached = await localCache.getCachedAudio(track.id);
-            if (cached) {
-              return { ...track, audioData: cached };
-            }
+          if (track.audioData) return track;
+          const cached = await localCache.getCachedAudio(track.id);
+          if (cached) return { ...track, audioData: cached };
+          if (track.storagePath) {
             try {
               const response = await fetch(track.storagePath);
               if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -101,18 +100,24 @@ export class FirebaseStorageService implements StorageService {
       });
       const tracks = (data.tracks || []) as any[];
 
-      // Upload audio for any track that has audioData but no storagePath yet
+      // Upload audio for any track that has audioData but no storagePath yet.
+      // Always cache locally as a fallback regardless of whether upload succeeds.
+      const { LocalStorageService } = await import('./LocalStorage');
+      const localCache = new LocalStorageService();
+
       const tracksWithPaths = await Promise.all(
         tracks.map(async (track) => {
-          if (track.audioData && !track.storagePath) {
-            try {
-              const key = `projects/${projectId}/songs/${songId}/tracks/${track.id}.mp3`;
-              const url = await audioStorage.upload(key, track.audioData, 'audio/mpeg');
-              if (url) return { ...track, storagePath: url };
-            } catch (uploadErr) {
-              console.warn(`Failed to upload audio for track ${track.id}:`, uploadErr);
+          if (track.audioData) {
+            await localCache.cacheAudio(track.id, track.audioData).catch(() => {});
+            if (!track.storagePath) {
+              try {
+                const key = `projects/${projectId}/songs/${songId}/tracks/${track.id}.mp3`;
+                const url = await audioStorage.upload(key, track.audioData, 'audio/mpeg');
+                if (url) return { ...track, storagePath: url };
+              } catch (uploadErr) {
+                console.warn(`Failed to upload audio for track ${track.id}:`, uploadErr);
+              }
             }
-            return track;
           }
           return track;
         })
