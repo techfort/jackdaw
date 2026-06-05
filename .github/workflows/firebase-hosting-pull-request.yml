@@ -17,6 +17,8 @@ jobs:
       - name: Set build env
         run: |
           echo "VITE_STORAGE_MODE=firebase" >> $GITHUB_ENV
+          echo "VITE_SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> $GITHUB_ENV
+          echo "VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" >> $GITHUB_ENV
           echo "VITE_R2_WORKER_URL=${{ secrets.R2_WORKER_URL }}" >> $GITHUB_ENV
       - run: npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0
