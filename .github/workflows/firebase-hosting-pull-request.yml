@@ -13,7 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npm ci && npm run build
+      - run: npm ci
+      - name: Set build env
+        run: |
+          echo "VITE_STORAGE_MODE=firebase" >> $GITHUB_ENV
+          echo "VITE_R2_WORKER_URL=${{ secrets.R2_WORKER_URL }}" >> $GITHUB_ENV
+      - run: npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
