@@ -19,6 +19,7 @@ import { CollaborationPanel } from './components/CollaborationPanel';
 import { CollaborativeCursors } from './components/CollaborativeCursors';
 import { ProjectDashboard } from './components/ProjectDashboard';
 import { InviteAccept } from './components/InviteAccept';
+import { SignInGate } from './components/SignInGate';
 import { CommandTerminal } from './components/CommandTerminal';
 import { AudioSpectrumWindow } from './components/AudioSpectrumWindow';
 import { CheatSheetBar } from './components/CheatSheetBar';
@@ -103,11 +104,6 @@ export default function App() {
   const [showCollaboration, setShowCollaboration] = React.useState(false);
   const [inviteParams, setInviteParams] = React.useState<{ inviteId: string; projectId: string } | null>(null);
   const [showSignInGate, setShowSignInGate] = React.useState(false);
-  const [signInEmail, setSignInEmail] = React.useState('');
-  const [signInDisplayName, setSignInDisplayName] = React.useState('');
-  const [signInSent, setSignInSent] = React.useState(false);
-  const [signInError, setSignInError] = React.useState('');
-  // true when URL contains a magic link but no email in localStorage — need email confirmation
   const [isMagicLinkPending, setIsMagicLinkPending] = React.useState(false);
   // invite params detected in URL before auth (so sign-in gate can show context)
   const [urlInviteContext, setUrlInviteContext] = React.useState<{ inviteId: string; projectId: string } | null>(null);
@@ -321,32 +317,6 @@ export default function App() {
     return () => document.removeEventListener('wheel', handleWheel);
   }, []);
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!signInEmail.trim()) return;
-    if (!signInDisplayName.trim()) {
-      setSignInError('Display name is required.');
-      return;
-    }
-    setSignInError('');
-
-    if (isMagicLinkPending) {
-      // User is confirming their email to complete a pending magic link sign-in
-      window.localStorage.setItem('emailForSignIn', signInEmail.trim());
-      window.localStorage.setItem('displayNameForSignIn', signInDisplayName.trim());
-      setIsMagicLinkPending(false);
-      await completeMagicLink();
-      return;
-    }
-
-    try {
-      await authService.signInMagicLink(signInEmail.trim(), signInDisplayName.trim());
-      setSignInSent(true);
-    } catch (err: any) {
-      setSignInError(err.message || 'Failed to send sign-in link');
-    }
-  };
-
   if (!showSignInGate && !currentSongIdForRender) {
     return (
       <>
@@ -370,60 +340,16 @@ export default function App() {
 
   if (showSignInGate) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[var(--color-bg-deep)] text-[#adbac7]">
-        <div className="w-full max-w-sm p-8 bg-[var(--color-bg-sidebar)] border border-[var(--color-border-main)] rounded-xl shadow-2xl">
-          <h1 className="text-xl font-black uppercase tracking-widest mb-1 text-white">JackDAW</h1>
-          <p className="text-xs text-[var(--color-text-muted)] mb-6">
-            {isMagicLinkPending ? 'Confirm your email to complete sign-in' : 'Sign in to collaborate'}
-          </p>
-
-          {urlInviteContext && !signInSent && (
-            <div className="mb-5 p-3 bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 rounded-lg">
-              <p className="text-xs text-[var(--color-accent)] font-bold leading-relaxed">
-                You have a pending invitation. Sign in to accept it and join the project.
-              </p>
-            </div>
-          )}
-
-          {signInSent ? (
-            <p className="text-sm text-[var(--color-accent)] font-bold">
-              Check your email — a sign-in link is on its way to {signInEmail}.
-            </p>
-          ) : (
-            <form onSubmit={handleSignIn} className="space-y-4">
-              <div>
-                <input
-                  type="email"
-                  value={signInEmail}
-                  onChange={e => setSignInEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  required
-                  autoFocus
-                  className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)]"
-                />
-              </div>
-              <div>
-                <input
-                  type="text"
-                  value={signInDisplayName}
-                  onChange={e => setSignInDisplayName(e.target.value)}
-                  placeholder="Display name (required)"
-                  required
-                  className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)]"
-                />
-                <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Shown to your collaborators</p>
-              </div>
-              {signInError && <p className="text-xs text-red-400">{signInError}</p>}
-              <button
-                type="submit"
-                className="w-full bg-[var(--color-accent)] text-black font-black uppercase tracking-widest text-xs py-2.5 rounded hover:brightness-110 transition-all"
-              >
-                {isMagicLinkPending ? 'Complete Sign-in' : 'Send Sign-in Link'}
-              </button>
-            </form>
-          )}
-        </div>
-      </div>
+      <SignInGate
+        isMagicLinkPending={isMagicLinkPending}
+        urlInviteContext={urlInviteContext}
+        onCompleteMagicLink={async (email, displayName) => {
+          window.localStorage.setItem('emailForSignIn', email);
+          window.localStorage.setItem('displayNameForSignIn', displayName);
+          setIsMagicLinkPending(false);
+          await completeMagicLink();
+        }}
+      />
     );
   }
 
@@ -442,13 +368,7 @@ export default function App() {
       <Toolbar
         onToggleCollaboration={() => setShowCollaboration(!showCollaboration)}
         isCollaborationOpen={showCollaboration}
-        onSignIn={() => {
-          setSignInEmail('');
-          setSignInDisplayName('');
-          setSignInSent(false);
-          setSignInError('');
-          setShowSignInGate(true);
-        }}
+        onSignIn={() => setShowSignInGate(true)}
       />
       
       <div className="flex-1 flex overflow-hidden relative">
