@@ -60,6 +60,7 @@ export interface TrackData {
   isMuted: boolean;
   isSoloed: boolean;
   clips: Clip[];
+  takes?: Clip[][];        // Saved alternative clip arrangements (take 1 = index 0, etc.)
   createdAt?: number;
   ownerId?: string;
   isFrozen?: boolean;
@@ -108,10 +109,13 @@ export interface DAWState {
   showMixer: boolean;
   isSpectrumOpen: boolean;
   isClickEnabled: boolean;
+  isOnline: boolean;
+  pendingWriteCount: number;
 
   // Actions
   setSpectrumOpen: (open: boolean) => void;
   setClickEnabled: (enabled: boolean) => void;
+  setOnline: (online: boolean) => void;
   setSelectedTrackId: (id: string | null) => void;
   setShowMixer: (show: boolean) => void;
   clearSong: () => void;
@@ -135,6 +139,9 @@ export interface DAWState {
   markCommentsSeen: (ids: string[]) => void;
   addReply: (commentId: string, text: string) => string;
   toggleFreezeTrack: (id: string) => void;
+  saveTake: (trackId: string) => void;
+  restoreTake: (trackId: string, takeIndex: number) => void;
+  deleteTake: (trackId: string, takeIndex: number) => void;
   addEmptyTrack: (name: string) => string;
   addTrack: (buffer: AudioBuffer, name: string, audioData?: ArrayBuffer, offset?: number) => void;
   splitTrack: (trackId: string, timestamp: number) => void;

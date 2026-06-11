@@ -107,6 +107,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const goToEnd = useStore(state => state.goToEnd);
   const seek = useStore(state => state.seek);
   const currentUser = useStore(state => state.currentUser);
+  const isOnline = useStore(state => state.isOnline);
+  const pendingWriteCount = useStore(state => state.pendingWriteCount);
   const [showProjects, setShowProjects] = useState(false);
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -306,6 +308,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           >
             <Save size={15} />
           </button>
+          <div
+            className="flex items-center gap-1 px-1.5"
+            title={isOnline ? (pendingWriteCount > 0 ? `${pendingWriteCount} pending write${pendingWriteCount !== 1 ? 's' : ''}` : 'Online') : 'Offline — changes queued'}
+          >
+            <div className={`w-1.5 h-1.5 rounded-full transition-colors ${isOnline ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`} />
+            {!isOnline && pendingWriteCount > 0 && (
+              <span className="text-[8px] font-mono text-amber-400 font-bold">{pendingWriteCount}</span>
+            )}
+          </div>
           {divider}
           <button
             onClick={undo}

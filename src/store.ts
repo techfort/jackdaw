@@ -69,6 +69,8 @@ export const useStore = create<DAWState>((set, get) => {
     showMixer: false,
     isSpectrumOpen: false,
     isClickEnabled: false,
+    isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    pendingWriteCount: 0,
     currentUser: null,
     activityEvents: [],
     seenCommentIds: [],
@@ -105,6 +107,7 @@ export const useStore = create<DAWState>((set, get) => {
     setCurrentUser: (user) => set({ currentUser: user }),
     setSpectrumOpen: (open) => set({ isSpectrumOpen: open }),
     setClickEnabled: (enabled) => set({ isClickEnabled: enabled }),
+    setOnline: (online) => set({ isOnline: online }),
     setSelectedTrackId: (id) => set({ selectedTrackId: id }),
     clearSong: () => {
       set({ currentSongId: null, currentSongName: 'Untitled Song', tracks: [], comments: [], isPlaying: false, isSyncing: false });
@@ -225,8 +228,13 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     pushUpdate: async () => {
-      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo, lastRemoteUpdate } = get();
+      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo, lastRemoteUpdate, isOnline } = get();
       if (!isSyncing || !currentProjectId || !currentSongId) return;
+
+      if (!isOnline) {
+        set(state => ({ pendingWriteCount: state.pendingWriteCount + 1 }));
+        return;
+      }
 
       const now = Date.now();
       const baseUpdatedAt = lastRemoteUpdate;
@@ -442,6 +450,44 @@ export const useStore = create<DAWState>((set, get) => {
       const u = get().currentUser;
       get().addActivityEvent({ kind: 'track_removed', actor: getActorInfo(u), timestamp: Date.now(), payload: { trackId: id, trackName: trackName || '' } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
+    },
+
+    saveTake: (trackId) => {
+      pushToHistory();
+      set((state) => ({
+        tracks: state.tracks.map(t => {
+          if (t.id !== trackId) return t;
+          const snapshot = (t.clips || []).map(c => ({ ...c }));
+          return { ...t, takes: [...(t.takes || []), snapshot], canUndo: true };
+        }),
+        canUndo: true,
+      }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+
+    restoreTake: (trackId, takeIndex) => {
+      const track = get().tracks.find(t => t.id === trackId);
+      if (!track || !track.takes?.[takeIndex]) return;
+      pushToHistory();
+      const restoredClips = track.takes[takeIndex].map(c => ({ ...c }));
+      set((state) => ({
+        tracks: state.tracks.map(t => t.id === trackId ? { ...t, clips: restoredClips } : t),
+        canUndo: true,
+      }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+
+    deleteTake: (trackId, takeIndex) => {
+      pushToHistory();
+      set((state) => ({
+        tracks: state.tracks.map(t => {
+          if (t.id !== trackId) return t;
+          const next = (t.takes || []).filter((_, i) => i !== takeIndex);
+          return { ...t, takes: next };
+        }),
+        canUndo: true,
+      }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
     },
 
     updateTrack: (id, updates, silent = false) => {

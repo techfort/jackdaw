@@ -9,6 +9,7 @@ import { useAudioEngine } from './hooks/useAudioEngine';
 import { useClickTrack } from './hooks/useClickTrack';
 import { useFileImport } from './hooks/useFileImport';
 import { usePresenceSync } from './hooks/usePresenceSync';
+import { useOnlineSync } from './hooks/useOnlineSync';
 import { Toolbar } from './components/Toolbar';
 import { authService, storageMode } from './services/storage';
 import { TimelineRuler } from './components/TimelineRuler';
@@ -216,6 +217,7 @@ export default function App() {
   useAudioEngine();
   useClickTrack();
   usePresenceSync();
+  useOnlineSync();
 
   // Detect invite params in the URL early — persist to localStorage so onAuthStateChanged
   // can pick them up regardless of sign-in timing (handles already-signed-in users too)

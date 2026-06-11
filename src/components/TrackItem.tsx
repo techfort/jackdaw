@@ -10,6 +10,10 @@ import {
   User as UserIcon,
   Lock,
   LockOpen,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  Download,
 } from 'lucide-react';
 import { useStore } from '../store';
 import { TrackData } from '../types';
@@ -42,7 +46,14 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const activeTool = useStore(state => state.activeTool);
   const splitTrack = useStore(state => state.splitTrack);
   const updateClip = useStore(state => state.updateClip);
-  
+  const saveTake = useStore(state => state.saveTake);
+  const restoreTake = useStore(state => state.restoreTake);
+  const deleteTake = useStore(state => state.deleteTake);
+  const [isExporting, setIsExporting] = React.useState(false);
+
+  const [activeTakeIndex, setActiveTakeIndex] = React.useState<number | null>(null);
+  const takes = track.takes || [];
+
   const waveformContainerRef = useRef<HTMLDivElement>(null);
 
   const trackComments = React.useMemo(() => comments.filter(c => c.trackId === track.id), [comments, track.id]);
@@ -54,6 +65,40 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
       time = Math.round(time / beatDuration) * beatDuration;
     }
     return time;
+  };
+
+  const handleExportStem = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isExporting || !track.buffer) return;
+    setIsExporting(true);
+    try {
+      const { exportStem } = await import('../lib/exportUtils');
+      await exportStem(track);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleSaveTake = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    saveTake(track.id);
+    setActiveTakeIndex(takes.length); // new take will land at this index
+  };
+
+  const handlePrevTake = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (takes.length === 0) return;
+    const next = activeTakeIndex === null ? takes.length - 1 : Math.max(0, activeTakeIndex - 1);
+    setActiveTakeIndex(next);
+    restoreTake(track.id, next);
+  };
+
+  const handleNextTake = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (takes.length === 0) return;
+    const next = activeTakeIndex === null ? 0 : Math.min(takes.length - 1, activeTakeIndex + 1);
+    setActiveTakeIndex(next);
+    restoreTake(track.id, next);
   };
 
   const handleAddComment = (timestamp?: number) => {
@@ -124,6 +169,25 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             </button>
             {canEdit && (
               <button
+                onClick={handleSaveTake}
+                className="p-1.5 text-[var(--color-text-muted)] hover:text-purple-400 hover:bg-[var(--color-bg-input)] rounded transition-colors"
+                title="Save take"
+              >
+                <Layers size={14} />
+              </button>
+            )}
+            {track.buffer && (
+              <button
+                onClick={handleExportStem}
+                disabled={isExporting}
+                className="p-1.5 text-[var(--color-text-muted)] hover:text-sky-400 hover:bg-[var(--color-bg-input)] rounded transition-colors disabled:opacity-40"
+                title="Export stem as WAV"
+              >
+                <Download size={14} />
+              </button>
+            )}
+            {canEdit && (
+              <button
                 onClick={() => removeTrackByReference(track.id)}
                 className="p-1.5 text-[var(--color-text-dark)] hover:text-red-500 hover:bg-[var(--color-bg-input)] rounded transition-colors"
                 title="Remove track"
@@ -164,6 +228,30 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             </span>
           )}
         </div>
+
+        {takes.length > 0 && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handlePrevTake}
+              disabled={activeTakeIndex === 0}
+              className="p-0.5 rounded text-[var(--color-text-muted)] hover:text-purple-400 disabled:opacity-30 transition-colors"
+              title="Previous take"
+            >
+              <ChevronLeft size={12} />
+            </button>
+            <span className="text-[9px] font-mono font-bold text-purple-400 tracking-tight">
+              T{activeTakeIndex !== null ? activeTakeIndex + 1 : takes.length}/{takes.length}
+            </span>
+            <button
+              onClick={handleNextTake}
+              disabled={activeTakeIndex !== null && activeTakeIndex >= takes.length - 1}
+              className="p-0.5 rounded text-[var(--color-text-muted)] hover:text-purple-400 disabled:opacity-30 transition-colors"
+              title="Next take"
+            >
+              <ChevronRight size={12} />
+            </button>
+          </div>
+        )}
 
         <div className="space-y-1">
           <div className="relative h-2 bg-[var(--color-bg-input)] rounded-full overflow-hidden border border-[var(--color-border-main)]">

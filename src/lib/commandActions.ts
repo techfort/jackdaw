@@ -1,7 +1,7 @@
 import { useStore } from '../store';
 import { TrackData } from '../types';
 import { storageService } from '../services/storage';
-import { exportMixdown } from './exportUtils';
+import { exportMixdown, exportStem } from './exportUtils';
 import { checkBrowserCompat } from './browserCompat';
 import { clamp } from './clamp';
 import { getClipEnd } from './clipUtils';
@@ -513,6 +513,24 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
   match = command.match(/^invite\s+(.+)$/i);
   if (match) {
     return inviteCollaboratorByEmail(match[1]);
+  }
+
+  // e stem <id|name> — export a specific track stem
+  match = command.match(/^e\s+stem\s+(.+)$/i);
+  if (match) {
+    const query = match[1].trim().toLowerCase();
+    const state = useStore.getState();
+    const track = state.tracks.find(
+      t => t.id.toLowerCase().startsWith(query) || t.name.toLowerCase() === query
+    );
+    if (!track) {
+      return { ok: false, message: `No track found matching "${match[1]}".` };
+    }
+    if (!track.buffer) {
+      return { ok: false, message: `Track "${track.name}" has no audio data to export.` };
+    }
+    await exportStem(track);
+    return { ok: true, message: `Exported stem: ${track.name}` };
   }
 
   if (/^e\s+stem$/i.test(command)) {
