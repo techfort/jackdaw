@@ -24,6 +24,7 @@ import { ProjectMenu } from './ProjectMenu';
 import { AnimatePresence } from 'motion/react';
 import { authService, storageMode, storageService } from '../services/storage';
 import { registerPunchInTrigger } from '../lib/commandActions';
+import { InputDeviceSelector } from './InputDeviceSelector';
 
 interface ToolbarProps {
   onToggleCollaboration?: () => void;
@@ -460,6 +461,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
         <div className={group}>
           <button onClick={() => setZoom(zoom * 0.8)} aria-label="Zoom out" title="Zoom out" className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomOut size={15} /></button>
           <button onClick={() => setZoom(zoom * 1.2)} aria-label="Zoom in" title="Zoom in" className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomIn size={15} /></button>
+        </div>
+
+        <div className="border-l border-white/10 pl-2 ml-0.5">
+          <InputDeviceSelector />
         </div>
 
         {storageMode === 'firebase' && (

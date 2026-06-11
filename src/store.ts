@@ -71,6 +71,8 @@ export const useStore = create<DAWState>((set, get) => {
     isClickEnabled: false,
     isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
     pendingWriteCount: 0,
+    availableInputDevices: [],
+    selectedInputDeviceId: null,
     currentUser: null,
     activityEvents: [],
     seenCommentIds: [],
@@ -108,6 +110,8 @@ export const useStore = create<DAWState>((set, get) => {
     setSpectrumOpen: (open) => set({ isSpectrumOpen: open }),
     setClickEnabled: (enabled) => set({ isClickEnabled: enabled }),
     setOnline: (online) => set({ isOnline: online }),
+    setAvailableInputDevices: (devices) => set({ availableInputDevices: devices }),
+    setSelectedInputDeviceId: (deviceId) => set({ selectedInputDeviceId: deviceId }),
     setSelectedTrackId: (id) => set({ selectedTrackId: id }),
     clearSong: () => {
       set({ currentSongId: null, currentSongName: 'Untitled Song', tracks: [], comments: [], isPlaying: false, isSyncing: false });

@@ -111,11 +111,15 @@ export interface DAWState {
   isClickEnabled: boolean;
   isOnline: boolean;
   pendingWriteCount: number;
+  availableInputDevices: MediaDeviceInfo[];
+  selectedInputDeviceId: string | null;
 
   // Actions
   setSpectrumOpen: (open: boolean) => void;
   setClickEnabled: (enabled: boolean) => void;
   setOnline: (online: boolean) => void;
+  setAvailableInputDevices: (devices: MediaDeviceInfo[]) => void;
+  setSelectedInputDeviceId: (deviceId: string | null) => void;
   setSelectedTrackId: (id: string | null) => void;
   setShowMixer: (show: boolean) => void;
   clearSong: () => void;
