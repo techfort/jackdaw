@@ -134,8 +134,10 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   };
 
   return (
-    <div 
-      className={`flex h-32 border-b border-[var(--color-border-main)] group relative w-full ${commentDraft?.trackId === track.id ? 'z-50' : ''} ${isSelected ? 'bg-[var(--color-accent)]/[0.08]' : 'bg-transparent'}`} 
+    <div
+      role="region"
+      aria-label={`Track: ${track.name}`}
+      className={`flex h-32 border-b border-[var(--color-border-main)] group relative w-full ${commentDraft?.trackId === track.id ? 'z-50' : ''} ${isSelected ? 'bg-[var(--color-accent)]/[0.08]' : 'bg-transparent'}`}
       id={`track-${track.id}`}
       onClick={() => selectTrackByReference(track.id)}
     >
@@ -154,6 +156,8 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             {canManageFreeze && (
               <button
                 onClick={(e) => { e.stopPropagation(); toggleFreezeTrack(track.id); }}
+                aria-label={track.isFrozen ? `Unfreeze ${track.name}` : `Freeze ${track.name}`}
+                aria-pressed={track.isFrozen}
                 className={`p-1.5 rounded transition-colors ${track.isFrozen ? 'text-sky-400 hover:text-sky-300 hover:bg-[var(--color-bg-input)]' : 'text-[var(--color-text-muted)] hover:text-sky-400 hover:bg-[var(--color-bg-input)]'}`}
                 title={track.isFrozen ? 'Unfreeze track' : 'Freeze track'}
               >
@@ -162,6 +166,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             )}
             <button
               onClick={() => handleAddComment()}
+              aria-label={`Add comment to ${track.name} at playhead`}
               className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-input)] rounded transition-colors"
               title="Add comment at playhead"
             >
@@ -170,6 +175,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             {canEdit && (
               <button
                 onClick={handleSaveTake}
+                aria-label={`Save take for ${track.name}`}
                 className="p-1.5 text-[var(--color-text-muted)] hover:text-purple-400 hover:bg-[var(--color-bg-input)] rounded transition-colors"
                 title="Save take"
               >
@@ -180,6 +186,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
               <button
                 onClick={handleExportStem}
                 disabled={isExporting}
+                aria-label={`Export ${track.name} as WAV`}
                 className="p-1.5 text-[var(--color-text-muted)] hover:text-sky-400 hover:bg-[var(--color-bg-input)] rounded transition-colors disabled:opacity-40"
                 title="Export stem as WAV"
               >
@@ -189,6 +196,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             {canEdit && (
               <button
                 onClick={() => removeTrackByReference(track.id)}
+                aria-label={`Remove track ${track.name}`}
                 className="p-1.5 text-[var(--color-text-dark)] hover:text-red-500 hover:bg-[var(--color-bg-input)] rounded transition-colors"
                 title="Remove track"
               >
@@ -205,6 +213,8 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                 if (track.isMuted) updateTrack(track.id, { isMuted: false });
                 else muteTrackByReference(track.id);
               }}
+              aria-label={track.isMuted ? `Unmute ${track.name}` : `Mute ${track.name}`}
+              aria-pressed={track.isMuted}
               className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isMuted ? 'bg-[var(--color-accent-purple)]/20 border-[var(--color-accent-purple)] text-[var(--color-accent-purple)]' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               M
@@ -214,6 +224,8 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                 if (track.isSoloed) updateTrack(track.id, { isSoloed: false });
                 else soloTrackByReference(track.id);
               }}
+              aria-label={track.isSoloed ? `Unsolo ${track.name}` : `Solo ${track.name}`}
+              aria-pressed={track.isSoloed}
               className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isSoloed ? 'bg-[var(--color-accent)] border-black text-black' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               S
@@ -230,21 +242,23 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
         </div>
 
         {takes.length > 0 && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" role="group" aria-label={`Takes for ${track.name}`}>
             <button
               onClick={handlePrevTake}
               disabled={activeTakeIndex === 0}
+              aria-label="Previous take"
               className="p-0.5 rounded text-[var(--color-text-muted)] hover:text-purple-400 disabled:opacity-30 transition-colors"
               title="Previous take"
             >
               <ChevronLeft size={12} />
             </button>
-            <span className="text-[9px] font-mono font-bold text-purple-400 tracking-tight">
+            <span className="text-[9px] font-mono font-bold text-purple-400 tracking-tight" aria-live="polite" aria-atomic="true">
               T{activeTakeIndex !== null ? activeTakeIndex + 1 : takes.length}/{takes.length}
             </span>
             <button
               onClick={handleNextTake}
               disabled={activeTakeIndex !== null && activeTakeIndex >= takes.length - 1}
+              aria-label="Next take"
               className="p-0.5 rounded text-[var(--color-text-muted)] hover:text-purple-400 disabled:opacity-30 transition-colors"
               title="Next take"
             >
@@ -264,6 +278,8 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
               min="0" max="1" step="0.01"
               value={track.volume}
               disabled={!canEdit}
+              aria-label={`Volume for ${track.name}`}
+              aria-valuetext={`${Math.round(track.volume * 100)}%`}
               onChange={(e) => { if (canEdit) updateTrack(track.id, { volume: parseFloat(e.target.value) }); }}
               className={`absolute inset-0 opacity-0 w-full ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed'}`}
             />

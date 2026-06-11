@@ -309,12 +309,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
             <Save size={15} />
           </button>
           <div
+            role="status"
+            aria-live="polite"
+            aria-label={isOnline ? (pendingWriteCount > 0 ? `Online, ${pendingWriteCount} pending write${pendingWriteCount !== 1 ? 's' : ''}` : 'Online') : `Offline, ${pendingWriteCount} write${pendingWriteCount !== 1 ? 's' : ''} queued`}
             className="flex items-center gap-1 px-1.5"
             title={isOnline ? (pendingWriteCount > 0 ? `${pendingWriteCount} pending write${pendingWriteCount !== 1 ? 's' : ''}` : 'Online') : 'Offline — changes queued'}
           >
-            <div className={`w-1.5 h-1.5 rounded-full transition-colors ${isOnline ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`} />
+            <div aria-hidden="true" className={`w-1.5 h-1.5 rounded-full transition-colors ${isOnline ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`} />
             {!isOnline && pendingWriteCount > 0 && (
-              <span className="text-[8px] font-mono text-amber-400 font-bold">{pendingWriteCount}</span>
+              <span aria-hidden="true" className="text-[8px] font-mono text-amber-400 font-bold">{pendingWriteCount}</span>
             )}
           </div>
           {divider}
@@ -360,6 +363,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           </button>
           <button
             onClick={handleExport}
+            aria-label="Export mixdown"
             className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--color-accent)]/20 hover:bg-[var(--color-accent)]/30 text-[var(--color-accent)] rounded text-[10px] font-black uppercase tracking-widest"
           >
             <Download size={13} /> Export
@@ -370,19 +374,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
       {/* 2. TRANSPORT & COUNTER */}
       <div className="flex items-center gap-2 shrink-0">
         <div className={group}>
-          <button onClick={goToStart} className={toggleBtn()} title="Start (H)"><SkipBack size={15} /></button>
-          <button onMouseDown={startRewind} onMouseUp={stopRewind} onMouseLeave={stopRewind} className={`p-1.5 rounded transition-all text-white/20 hover:text-white/40 active:text-[var(--color-accent)]`} title="Rewind (R)"><Rewind size={15} fill="currentColor" /></button>
+          <button onClick={goToStart} aria-label="Go to start" className={toggleBtn()} title="Start (H)"><SkipBack size={15} /></button>
+          <button onMouseDown={startRewind} onMouseUp={stopRewind} onMouseLeave={stopRewind} aria-label="Rewind" className={`p-1.5 rounded transition-all text-white/20 hover:text-white/40 active:text-[var(--color-accent)]`} title="Rewind (R)"><Rewind size={15} fill="currentColor" /></button>
 
           <button
             onClick={() => setIsPlaying(!isPlaying)}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+            aria-pressed={isPlaying}
             className={`p-1.5 px-5 rounded transition-all duration-200 ${isPlaying ? 'bg-[var(--color-accent)] text-black shadow-lg shadow-[var(--color-accent)]/20' : 'bg-zinc-700 hover:bg-zinc-600 text-white'}`}
             title="Play/Pause (Space)"
           >
             {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}
           </button>
 
-          <button onMouseDown={startForward} onMouseUp={stopForward} onMouseLeave={stopForward} className={`p-1.5 rounded transition-all text-white/20 hover:text-white/40 active:text-[var(--color-accent)]`} title="Forward (F)"><FastForward size={15} fill="currentColor" /></button>
-          <button onClick={goToEnd} className={toggleBtn()} title="End (E)"><SkipForward size={15} /></button>
+          <button onMouseDown={startForward} onMouseUp={stopForward} onMouseLeave={stopForward} aria-label="Fast forward" className={`p-1.5 rounded transition-all text-white/20 hover:text-white/40 active:text-[var(--color-accent)]`} title="Forward (F)"><FastForward size={15} fill="currentColor" /></button>
+          <button onClick={goToEnd} aria-label="Go to end" className={toggleBtn()} title="End (E)"><SkipForward size={15} /></button>
         </div>
 
         <div className="flex items-center bg-black/40 rounded px-3 py-1.5 border border-white/10 gap-3 shadow-inner">
@@ -391,6 +397,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
             <input
               type="number"
               value={tempo}
+              aria-label="Tempo (BPM)"
               onChange={(e) => setTempo(Number(e.target.value))}
               className="w-10 bg-transparent text-sm font-mono text-[var(--color-accent)] focus:outline-none text-center"
             />
@@ -406,21 +413,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
       {/* 3. TOOLS & VIEW */}
       <div className="flex items-center gap-2">
         <div className={group}>
-          <button onClick={() => setTool('select')} className={iconBtn(activeTool === 'select')} title="Select Tool (V)"><MousePointer2 size={15} /></button>
-          <button onClick={() => setTool('scissors')} className={iconBtn(activeTool === 'scissors')} title="Scissors Tool (S)"><Scissors size={15} /></button>
-          <button onClick={() => setTool('mute')} className={iconBtn(activeTool === 'mute')} title="Mute Tool (M)"><VolumeX size={15} /></button>
+          <button onClick={() => setTool('select')} aria-label="Select tool" aria-pressed={activeTool === 'select'} className={iconBtn(activeTool === 'select')} title="Select Tool (V)"><MousePointer2 size={15} /></button>
+          <button onClick={() => setTool('scissors')} aria-label="Scissors tool" aria-pressed={activeTool === 'scissors'} className={iconBtn(activeTool === 'scissors')} title="Scissors Tool (S)"><Scissors size={15} /></button>
+          <button onClick={() => setTool('mute')} aria-label="Mute tool" aria-pressed={activeTool === 'mute'} className={iconBtn(activeTool === 'mute')} title="Mute Tool (M)"><VolumeX size={15} /></button>
         </div>
 
         <div className={group}>
-          <button onClick={() => setSnapEnabled(!snapEnabled)} className={toggleBtn(snapEnabled)} title="Snap to Grid"><Magnet size={15} /></button>
-          <button onClick={() => setFollowPlayhead(!followPlayhead)} className={toggleBtn(followPlayhead)} title="Follow Playhead"><Target size={15} /></button>
-          <button onClick={() => setClickEnabled(!isClickEnabled)} className={toggleBtn(isClickEnabled)} title="Click Track (metronome)"><Timer size={15} /></button>
+          <button onClick={() => setSnapEnabled(!snapEnabled)} aria-label="Snap to grid" aria-pressed={snapEnabled} className={toggleBtn(snapEnabled)} title="Snap to Grid"><Magnet size={15} /></button>
+          <button onClick={() => setFollowPlayhead(!followPlayhead)} aria-label="Follow playhead" aria-pressed={followPlayhead} className={toggleBtn(followPlayhead)} title="Follow Playhead"><Target size={15} /></button>
+          <button onClick={() => setClickEnabled(!isClickEnabled)} aria-label="Click track" aria-pressed={isClickEnabled} className={toggleBtn(isClickEnabled)} title="Click Track (metronome)"><Timer size={15} /></button>
           {divider}
-          <button onClick={() => setShowMixer(!showMixer)} className={textBtn(showMixer)}>
+          <button onClick={() => setShowMixer(!showMixer)} aria-label="Toggle mixer" aria-pressed={showMixer} className={textBtn(showMixer)}>
             <LayoutDashboard size={13} /> Mixer
           </button>
           <div className="relative">
-            <button onClick={onToggleCollaboration} className={textBtn(isCollaborationOpen, 'bg-zinc-600 text-white shadow-lg')}>
+            <button onClick={onToggleCollaboration} aria-label="Toggle collaboration hub" aria-pressed={isCollaborationOpen} className={textBtn(isCollaborationOpen, 'bg-zinc-600 text-white shadow-lg')}>
               <TrendingUp size={13} /> Hub
             </button>
             {!isCollaborationOpen && (unreadCount > 0 || blockerCount > 0) && (
@@ -434,12 +441,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
         <div className={`${group} gap-0`}>
           <button
             onClick={() => setTimelineMode('time')}
+            aria-label="Time mode"
+            aria-pressed={timelineMode === 'time'}
             className={`px-2.5 py-1.5 rounded text-[9px] font-black uppercase tracking-tighter transition-all ${timelineMode === 'time' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white'}`}
           >
             Time
           </button>
           <button
             onClick={() => setTimelineMode('beats')}
+            aria-label="Beats mode"
+            aria-pressed={timelineMode === 'beats'}
             className={`px-2.5 py-1.5 rounded text-[9px] font-black uppercase tracking-tighter transition-all ${timelineMode === 'beats' ? 'bg-white/10 text-white shadow-inner' : 'text-white/30 hover:text-white'}`}
           >
             Beats
@@ -447,8 +458,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
         </div>
 
         <div className={group}>
-          <button onClick={() => setZoom(zoom * 0.8)} className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomOut size={15} /></button>
-          <button onClick={() => setZoom(zoom * 1.2)} className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomIn size={15} /></button>
+          <button onClick={() => setZoom(zoom * 0.8)} aria-label="Zoom out" title="Zoom out" className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomOut size={15} /></button>
+          <button onClick={() => setZoom(zoom * 1.2)} aria-label="Zoom in" title="Zoom in" className="p-1.5 text-white/40 hover:text-white rounded hover:bg-white/10"><ZoomIn size={15} /></button>
         </div>
 
         {storageMode === 'firebase' && (

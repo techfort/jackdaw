@@ -58,7 +58,11 @@ export const SignInGate: React.FC<SignInGateProps> = ({ isMagicLinkPending, urlI
         ) : (
           <form onSubmit={handleSignIn} className="space-y-4">
             <div>
+              <label htmlFor="signin-email" className="block text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)] mb-1">
+                Email
+              </label>
               <input
+                id="signin-email"
                 type="email"
                 value={signInEmail}
                 onChange={e => setSignInEmail(e.target.value)}
@@ -69,17 +73,22 @@ export const SignInGate: React.FC<SignInGateProps> = ({ isMagicLinkPending, urlI
               />
             </div>
             <div>
+              <label htmlFor="signin-display-name" className="block text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)] mb-1">
+                Display name
+              </label>
               <input
+                id="signin-display-name"
                 type="text"
                 value={signInDisplayName}
                 onChange={e => setSignInDisplayName(e.target.value)}
-                placeholder="Display name (required)"
+                placeholder="How collaborators see you"
                 required
+                aria-describedby="signin-display-name-hint"
                 className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)]"
               />
-              <p className="text-[10px] text-[var(--color-text-muted)] mt-1">Shown to your collaborators</p>
+              <p id="signin-display-name-hint" className="text-[10px] text-[var(--color-text-muted)] mt-1">Shown to your collaborators</p>
             </div>
-            {signInError && <p className="text-xs text-red-400">{signInError}</p>}
+            {signInError && <p role="alert" className="text-xs text-red-400">{signInError}</p>}
             <button
               type="submit"
               className="w-full bg-[var(--color-accent)] text-black font-black uppercase tracking-widest text-xs py-2.5 rounded hover:brightness-110 transition-all"

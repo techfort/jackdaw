@@ -363,17 +363,21 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                         <div className="relative" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => setOpenStatusId(openStatusId === comment.id ? null : comment.id)}
+                            aria-haspopup="menu"
+                            aria-expanded={openStatusId === comment.id}
+                            aria-label={`Comment status: ${comment.status.replace('_', ' ')}. Click to change.`}
                             className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded cursor-pointer ${STATUS_COLORS[comment.status] || STATUS_COLORS.open}`}
                             title="Set comment status"
                           >
                             {comment.status.replace('_', ' ')}
                           </button>
                           {openStatusId === comment.id && (
-                            <div className="absolute left-0 top-full mt-1 z-50 bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded shadow-xl min-w-[110px] overflow-hidden">
+                            <div role="menu" aria-label="Comment status options" className="absolute left-0 top-full mt-1 z-50 bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded shadow-xl min-w-[110px] overflow-hidden">
                               {(['open', 'in_progress', 'needs_review', 'approved'] as const).map(s => (
                                 <button
                                   key={s}
                                   onClick={() => { setCommentStatus(comment.id, s); setOpenStatusId(null); }}
+                                  aria-current={comment.status === s ? 'true' : undefined}
                                   className={`w-full text-left text-[8px] font-bold uppercase tracking-widest px-2 py-1.5 hover:bg-white/10 transition-colors ${STATUS_COLORS[s]}`}
                                 >
                                   {s.replace('_', ' ')}
@@ -396,6 +400,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                         {comment.status !== 'approved' && (
                           <button
                             onClick={() => removeComment(comment.id)}
+                            aria-label={`Delete comment #${comment.id}`}
                             className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-500 transition-all rounded hover:bg-rose-500/10"
                           >
                             <AlertCircle size={12} />
