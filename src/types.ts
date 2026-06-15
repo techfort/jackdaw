@@ -64,6 +64,7 @@ export interface TrackData {
   createdAt?: number;
   ownerId?: string;
   isFrozen?: boolean;
+  isArmed?: boolean;
 }
 
 export type TimelineMode = 'time' | 'beats';
@@ -113,6 +114,7 @@ export interface DAWState {
   pendingWriteCount: number;
   availableInputDevices: MediaDeviceInfo[];
   selectedInputDeviceId: string | null;
+  isRecording: boolean;
 
   // Actions
   setSpectrumOpen: (open: boolean) => void;
@@ -120,6 +122,10 @@ export interface DAWState {
   setOnline: (online: boolean) => void;
   setAvailableInputDevices: (devices: MediaDeviceInfo[]) => void;
   setSelectedInputDeviceId: (deviceId: string | null) => void;
+  armTrack: (trackId: string, armed: boolean) => void;
+  startRecording: () => Promise<void>;
+  stopRecording: () => Promise<void>;
+  addRecordedClip: (trackId: string, buffer: AudioBuffer, audioData: ArrayBuffer, offset: number) => void;
   setSelectedTrackId: (id: string | null) => void;
   setShowMixer: (show: boolean) => void;
   clearSong: () => void;

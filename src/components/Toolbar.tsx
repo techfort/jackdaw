@@ -14,7 +14,8 @@ import {
   Mic,
   LogOut,
   LogIn,
-  Timer
+  Timer,
+  Circle,
 } from 'lucide-react';
 import { useStore } from '../store';
 import { exportMixdown } from '../lib/exportUtils';
@@ -86,6 +87,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const activeTool = useStore(state => state.activeTool);
   const setTool = useStore(state => state.setTool);
   const tracks = useStore(state => state.tracks);
+  const hasArmedTrack = tracks.some(t => t.isArmed);
   const comments = useStore(state => state.comments);
   const seenCommentIds = useStore(state => state.seenCommentIds);
   const currentProjectId = useStore(state => state.currentProjectId);
@@ -109,6 +111,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const seek = useStore(state => state.seek);
   const currentUser = useStore(state => state.currentUser);
   const isOnline = useStore(state => state.isOnline);
+  const isRecording = useStore(state => state.isRecording);
+  const startRecording = useStore(state => state.startRecording);
+  const stopRecording = useStore(state => state.stopRecording);
   const pendingWriteCount = useStore(state => state.pendingWriteCount);
   const [showProjects, setShowProjects] = useState(false);
   const [showExportOptions, setShowExportOptions] = useState(false);
@@ -390,6 +395,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
 
           <button onMouseDown={startForward} onMouseUp={stopForward} onMouseLeave={stopForward} aria-label="Fast forward" className={`p-1.5 rounded transition-all text-white/20 hover:text-white/40 active:text-[var(--color-accent)]`} title="Forward (F)"><FastForward size={15} fill="currentColor" /></button>
           <button onClick={goToEnd} aria-label="Go to end" className={toggleBtn()} title="End (E)"><SkipForward size={15} /></button>
+          <div className="w-px h-4 bg-white/10 mx-0.5 shrink-0" />
+          <button
+            onClick={() => isRecording ? stopRecording() : startRecording()}
+            disabled={!isRecording && !hasArmedTrack}
+            aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+            aria-pressed={isRecording}
+            title={isRecording ? 'Stop Recording' : hasArmedTrack ? 'Start Recording' : 'Arm a track first (R)'}
+            className={`p-1.5 rounded transition-all disabled:opacity-30 ${
+              isRecording
+                ? 'text-red-400 animate-pulse'
+                : 'text-red-400/50 hover:text-red-400 hover:bg-red-500/10'
+            }`}
+          >
+            <Circle size={15} fill="currentColor" />
+          </button>
         </div>
 
         <div className="flex items-center bg-black/40 rounded px-3 py-1.5 border border-white/10 gap-3 shadow-inner">

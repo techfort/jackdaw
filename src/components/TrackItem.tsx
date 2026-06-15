@@ -34,6 +34,8 @@ interface TrackItemProps {
 export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const updateTrack = useStore(state => state.updateTrack);
   const toggleFreezeTrack = useStore(state => state.toggleFreezeTrack);
+  const armTrack = useStore(state => state.armTrack);
+  const isRecording = useStore(state => state.isRecording);
   const currentUser = useStore(state => state.currentUser);
   const currentUserRole = useStore(state => state.currentUserRole);
   const zoom = useStore(state => state.zoom);
@@ -229,6 +231,21 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
               className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isSoloed ? 'bg-[var(--color-accent)] border-black text-black' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               S
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); armTrack(track.id, !track.isArmed); }}
+              aria-label={track.isArmed ? `Disarm ${track.name}` : `Arm ${track.name} for recording`}
+              aria-pressed={!!track.isArmed}
+              title={track.isArmed ? 'Disarm track' : 'Arm for recording'}
+              className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${
+                isRecording && track.isArmed
+                  ? 'bg-red-500 border-red-600 text-white animate-pulse'
+                  : track.isArmed
+                  ? 'bg-red-500/20 border-red-500 text-red-400'
+                  : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-red-400'
+              }`}
+            >
+              R
             </button>
           </div>
           {track.isFrozen && !canManageFreeze && (

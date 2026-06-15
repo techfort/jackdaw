@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import React, { useMemo } from 'react';
 import { getSharedAudioContext } from './lib/sharedAudioContext';
+import { startCapture, RecordingSession } from './lib/recordingEngine';
+import audioBufferToWav from 'audiobuffer-to-wav';
 import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind, Reply } from './types';
 import { ConcurrentUpdateError } from './services/storage/types';
 import { storageService, authService } from './services/storage';
@@ -22,6 +24,9 @@ const generateId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 };
+
+let _recordSession: RecordingSession | null = null;
+let _recordStartTime = 0;
 
 export const useStore = create<DAWState>((set, get) => {
   const past: HistoryState[] = [];
@@ -73,6 +78,7 @@ export const useStore = create<DAWState>((set, get) => {
     pendingWriteCount: 0,
     availableInputDevices: [],
     selectedInputDeviceId: null,
+    isRecording: false,
     currentUser: null,
     activityEvents: [],
     seenCommentIds: [],
@@ -113,6 +119,70 @@ export const useStore = create<DAWState>((set, get) => {
     setAvailableInputDevices: (devices) => set({ availableInputDevices: devices }),
     setSelectedInputDeviceId: (deviceId) => set({ selectedInputDeviceId: deviceId }),
     setSelectedTrackId: (id) => set({ selectedTrackId: id }),
+
+    armTrack: (trackId, armed) => {
+      set((state) => ({
+        tracks: state.tracks.map(t => t.id === trackId ? { ...t, isArmed: armed } : t),
+      }));
+    },
+
+    startRecording: async () => {
+      const { selectedInputDeviceId, tracks, isRecording } = get();
+      if (isRecording || _recordSession) return;
+      if (!tracks.some(t => t.isArmed)) return;
+      try {
+        _recordSession = await startCapture(selectedInputDeviceId);
+        _recordStartTime = get().currentTime;
+        set({ isRecording: true });
+      } catch (err) {
+        console.error('Failed to start recording:', err);
+        throw err;
+      }
+    },
+
+    stopRecording: async () => {
+      if (!_recordSession) return;
+      const session = _recordSession;
+      _recordSession = null;
+      set({ isRecording: false });
+      try {
+        const buffer = await session.stop();
+        if (buffer.duration < 0.05) return;
+        const wav: ArrayBuffer = audioBufferToWav(buffer);
+        const armedTracks = get().tracks.filter(t => t.isArmed);
+        for (const track of armedTracks) {
+          get().addRecordedClip(track.id, buffer, wav, _recordStartTime);
+        }
+      } catch (err) {
+        console.error('Failed to stop recording:', err);
+      }
+    },
+
+    addRecordedClip: (trackId, buffer, audioData, offset) => {
+      pushToHistory();
+      set((state) => ({
+        tracks: state.tracks.map(t => {
+          if (t.id !== trackId) return t;
+          return {
+            ...t,
+            buffer,
+            audioData,
+            clips: [
+              ...(t.clips || []),
+              {
+                id: generateId(),
+                offset,
+                duration: buffer.duration,
+                audioStart: 0,
+                isMuted: false,
+              },
+            ],
+          };
+        }),
+        canUndo: true,
+      }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
     clearSong: () => {
       set({ currentSongId: null, currentSongName: 'Untitled Song', tracks: [], comments: [], isPlaying: false, isSyncing: false });
     },
