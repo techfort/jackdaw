@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
-import { ActivityEvent } from '../types';
-import { authService, storageMode } from '../services/storage';
+import { storageMode } from '../services/storage';
 import { parseSegments } from '../lib/mentionUtils';
 import {
   CheckCircle2,
@@ -14,92 +13,15 @@ import {
   TrendingUp,
   AlertCircle,
   Target,
-  LogIn,
-  LogOut,
-  Edit2,
   Users,
   Activity,
-  Music2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { MembersPanel } from './MembersPanel';
+import { ActivityFeed } from './ActivityFeed';
+import { UserIdentitySection } from './UserIdentitySection';
 
-const EVENT_ICONS: Record<string, React.ReactNode> = {
-  track_added: <Music2 size={12} className="text-white" />,
-  track_removed: <Music2 size={12} className="text-white/40" />,
-  comment_added: <MessageSquare size={12} className="text-white" />,
-  comment_resolved: <CheckCircle2 size={12} className="text-emerald-400" />,
-  comment_reopened: <Circle size={12} className="text-amber-400" />,
-  comment_status_changed: <Clock size={12} className="text-blue-400" />,
-};
-
-const getEventDisplay = (ev: ActivityEvent, getTrackName: (id: string) => string): { label: string; detail: string } => {
-  const p = ev.payload;
-  switch (ev.kind) {
-    case 'track_added':
-      return { label: String(p.trackName || 'Unnamed'), detail: 'Track added' };
-    case 'track_removed':
-      return { label: String(p.trackName || 'Track'), detail: 'Track removed' };
-    case 'comment_added': {
-      const text = String(p.text || '');
-      return { label: text.length > 60 ? `${text.slice(0, 60)}…` : text, detail: `Note on ${getTrackName(String(p.trackId || ''))}` };
-    }
-    case 'comment_resolved': {
-      const ids = p.commentIds as string[] | undefined;
-      if (ids && ids.length > 1) return { label: `${ids.length} notes resolved`, detail: 'Batch resolve' };
-      return { label: `#${p.commentId || (ids && ids[0]) || '?'}`, detail: 'Note resolved' };
-    }
-    case 'comment_reopened':
-      return { label: `#${String(p.commentId || '?')}`, detail: 'Note reopened' };
-    case 'comment_status_changed':
-      return { label: `#${String(p.commentId || '?')}`, detail: `${String(p.from || '')} → ${String(p.to || '')}` };
-    default:
-      return { label: 'Event', detail: ev.kind };
-  }
-};
-
-const ActivityFeed: React.FC<{ getUserColor: (id: string) => string }> = ({ getUserColor }) => {
-  const activityEvents = useStore(state => state.activityEvents);
-  const tracks = useStore(state => state.tracks);
-  const getTrackName = (trackId: string) => tracks.find(t => t.id === trackId)?.name || 'Unknown Track';
-
-  const sorted = [...activityEvents].sort((a, b) => b.timestamp - a.timestamp);
-
-  if (sorted.length === 0) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center opacity-20 text-center px-10">
-        <div className="w-16 h-16 rounded-3xl bg-white/5 flex items-center justify-center mb-4 border border-white/5">
-          <Activity size={32} />
-        </div>
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] leading-relaxed">No activity yet</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-2">
-      {sorted.map(ev => {
-        const { label, detail } = getEventDisplay(ev, getTrackName);
-        return (
-          <div key={ev.id} className="flex gap-3 items-start p-3 rounded-xl bg-white/[0.02] border border-white/5">
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border border-white/10 ${getUserColor(ev.actor.userId)}`}>
-              {EVENT_ICONS[ev.kind] ?? <MessageSquare size={12} className="text-white" />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-black text-white/80 leading-snug truncate">{label}</p>
-              <p className="text-[9px] text-white/30 font-bold uppercase tracking-tighter">{detail}</p>
-              <p className="text-[9px] text-[var(--color-accent)] font-bold mt-0.5">{ev.actor.userName}</p>
-            </div>
-            <span className="text-[8px] text-white/20 font-mono shrink-0 mt-0.5" title={new Date(ev.timestamp).toLocaleString()}>
-              {formatDistanceToNow(ev.timestamp, { addSuffix: true })}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
 
 export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const {
@@ -138,34 +60,6 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('open');
   const [search, setSearch] = useState('');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
-  const [showIdentityEdit, setShowIdentityEdit] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [newDisplayName, setNewDisplayName] = useState('');
-  const [newName, setNewName] = useState('');
-  const [authStatus, setAuthStatus] = useState<string | null>(null);
-
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newEmail) return;
-    try {
-      setAuthStatus('Sending link...');
-      await authService.signInMagicLink(newEmail, newDisplayName.trim() || undefined);
-      setAuthStatus('Check your email!');
-    } catch (err: any) {
-      setAuthStatus(err.message);
-    }
-  };
-
-  const handleUpdateName = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName) return;
-    try {
-      await authService.updateProfile(newName);
-      setShowIdentityEdit(false);
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   const allTags = [...new Set(comments.flatMap(c => c.tags || []))].sort();
 
@@ -350,88 +244,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
           </div>
         </div>
 
-        {/* User Identity Section */}
-        <div className="mb-5 p-3 bg-white/[0.03] rounded-xl border border-white/10">
-          {!showIdentityEdit ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-lg ${currentUser?.id ? getUserColor(currentUser.id) : 'bg-zinc-800'} flex items-center justify-center border border-white/10 shadow-lg`}>
-                  <UserIcon size={14} className="text-white" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-black text-white leading-none mb-0.5">{currentUser?.name || 'Anonymous User'}</div>
-                  <div className="text-[8px] text-white/30 uppercase font-bold tracking-tighter">
-                    {storageMode === 'firebase' ? (currentUser?.isAnonymous ? 'Guest Mode' : 'Verified Actor') : 'Local Identity'}
-                  </div>
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  setNewName(currentUser?.name || '');
-                  setShowIdentityEdit(true);
-                }}
-                className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-white/20 hover:text-[var(--color-accent)]"
-              >
-                <Edit2 size={12} />
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-[9px] font-black text-[var(--color-accent)] uppercase tracking-widest">Identify Yourself</h3>
-                <button onClick={() => setShowIdentityEdit(false)} className="text-[8px] text-white/30 hover:text-white uppercase font-black">Cancel</button>
-              </div>
-
-              {/* Name Edit */}
-              <form onSubmit={handleUpdateName} className="flex gap-2">
-                <input 
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Enter display name..."
-                  className="flex-1 bg-black/40 border border-white/10 rounded-lg py-1.5 px-3 text-[10px] focus:outline-none focus:border-[var(--color-accent)]/50"
-                />
-                <button type="submit" className="bg-zinc-800 px-3 py-1 rounded-lg text-[9px] font-black uppercase text-white hover:bg-zinc-700 transition-colors">Set</button>
-              </form>
-
-              {/* Magic Link (Only if Firebase) */}
-              {storageMode === 'firebase' && currentUser?.isAnonymous && (
-                <div className="pt-2 border-t border-white/5">
-                  <p className="text-[8px] text-white/40 mb-2 uppercase tracking-tighter">Sign in for persistent cloud identity</p>
-                  <form onSubmit={handleSignIn} className="flex gap-2">
-                    <input 
-                      type="email"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                      placeholder="email@example.com"
-                      className="flex-1 bg-black/40 border border-white/10 rounded-lg py-1.5 px-3 text-[10px] focus:outline-none focus:border-[var(--color-accent)]/50"
-                    />
-                    <input 
-                      type="text"
-                      value={newDisplayName}
-                      onChange={(e) => setNewDisplayName(e.target.value)}
-                      placeholder="Display name"
-                      className="flex-1 bg-black/40 border border-white/10 rounded-lg py-1.5 px-3 text-[10px] focus:outline-none focus:border-[var(--color-accent)]/50"
-                    />
-                    <button type="submit" className="bg-[var(--color-accent)] px-3 py-1 rounded-lg text-[9px] font-black uppercase text-black hover:scale-105 transition-transform">
-                      <LogIn size={10} />
-                    </button>
-                  </form>
-                  {authStatus && <p className="text-[8px] text-[var(--color-accent)] mt-1 font-bold">{authStatus}</p>}
-                </div>
-              )}
-
-              {storageMode === 'firebase' && !currentUser?.isAnonymous && (
-                <button 
-                  onClick={() => authService.signOut()}
-                  className="w-full py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-500/20 transition-all"
-                >
-                  <LogOut size={10} /> Sign Out
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <UserIdentitySection getUserColor={getUserColor} />
 
         {/* Search & Filter */}
         <div className="space-y-3">
@@ -550,17 +363,21 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                         <div className="relative" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => setOpenStatusId(openStatusId === comment.id ? null : comment.id)}
+                            aria-haspopup="menu"
+                            aria-expanded={openStatusId === comment.id}
+                            aria-label={`Comment status: ${comment.status.replace('_', ' ')}. Click to change.`}
                             className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded cursor-pointer ${STATUS_COLORS[comment.status] || STATUS_COLORS.open}`}
                             title="Set comment status"
                           >
                             {comment.status.replace('_', ' ')}
                           </button>
                           {openStatusId === comment.id && (
-                            <div className="absolute left-0 top-full mt-1 z-50 bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded shadow-xl min-w-[110px] overflow-hidden">
+                            <div role="menu" aria-label="Comment status options" className="absolute left-0 top-full mt-1 z-50 bg-[var(--color-bg-surface)] border border-[var(--color-border-main)] rounded shadow-xl min-w-[110px] overflow-hidden">
                               {(['open', 'in_progress', 'needs_review', 'approved'] as const).map(s => (
                                 <button
                                   key={s}
                                   onClick={() => { setCommentStatus(comment.id, s); setOpenStatusId(null); }}
+                                  aria-current={comment.status === s ? 'true' : undefined}
                                   className={`w-full text-left text-[8px] font-bold uppercase tracking-widest px-2 py-1.5 hover:bg-white/10 transition-colors ${STATUS_COLORS[s]}`}
                                 >
                                   {s.replace('_', ' ')}
@@ -583,6 +400,7 @@ export const CollaborationPanel: React.FC<{ onClose: () => void }> = ({ onClose 
                         {comment.status !== 'approved' && (
                           <button
                             onClick={() => removeComment(comment.id)}
+                            aria-label={`Delete comment #${comment.id}`}
                             className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-500 transition-all rounded hover:bg-rose-500/10"
                           >
                             <AlertCircle size={12} />

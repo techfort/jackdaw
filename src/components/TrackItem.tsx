@@ -10,6 +10,10 @@ import {
   User as UserIcon,
   Lock,
   LockOpen,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  Download,
 } from 'lucide-react';
 import { useStore } from '../store';
 import { TrackData } from '../types';
@@ -21,8 +25,7 @@ import {
   selectTrackByReference,
   soloTrackByReference,
 } from '../lib/commandActions';
-import { getAutocompleteQuery, mentionHandle } from '../lib/mentionUtils';
-import { storageService } from '../services/storage';
+import { CommentDraftOverlay } from './CommentDraftOverlay';
 
 interface TrackItemProps {
   track: TrackData;
@@ -31,20 +34,28 @@ interface TrackItemProps {
 export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const updateTrack = useStore(state => state.updateTrack);
   const toggleFreezeTrack = useStore(state => state.toggleFreezeTrack);
+  const armTrack = useStore(state => state.armTrack);
+  const isRecording = useStore(state => state.isRecording);
   const currentUser = useStore(state => state.currentUser);
   const currentUserRole = useStore(state => state.currentUserRole);
   const zoom = useStore(state => state.zoom);
   const snapEnabled = useStore(state => state.snapEnabled);
   const tempo = useStore(state => state.tempo);
   const timelineMode = useStore(state => state.timelineMode);
-  const addComment = useStore(state => state.addComment);
   const removeComment = useStore(state => state.removeComment);
   const toggleResolveComment = useStore(state => state.toggleResolveComment);
   const comments = useStore(state => state.comments);
   const activeTool = useStore(state => state.activeTool);
   const splitTrack = useStore(state => state.splitTrack);
   const updateClip = useStore(state => state.updateClip);
-  
+  const saveTake = useStore(state => state.saveTake);
+  const restoreTake = useStore(state => state.restoreTake);
+  const deleteTake = useStore(state => state.deleteTake);
+  const [isExporting, setIsExporting] = React.useState(false);
+
+  const [activeTakeIndex, setActiveTakeIndex] = React.useState<number | null>(null);
+  const takes = track.takes || [];
+
   const waveformContainerRef = useRef<HTMLDivElement>(null);
 
   const trackComments = React.useMemo(() => comments.filter(c => c.trackId === track.id), [comments, track.id]);
@@ -58,6 +69,40 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
     return time;
   };
 
+  const handleExportStem = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isExporting || !track.buffer) return;
+    setIsExporting(true);
+    try {
+      const { exportStem } = await import('../lib/exportUtils');
+      await exportStem(track);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleSaveTake = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    saveTake(track.id);
+    setActiveTakeIndex(takes.length); // new take will land at this index
+  };
+
+  const handlePrevTake = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (takes.length === 0) return;
+    const next = activeTakeIndex === null ? takes.length - 1 : Math.max(0, activeTakeIndex - 1);
+    setActiveTakeIndex(next);
+    restoreTake(track.id, next);
+  };
+
+  const handleNextTake = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (takes.length === 0) return;
+    const next = activeTakeIndex === null ? 0 : Math.min(takes.length - 1, activeTakeIndex + 1);
+    setActiveTakeIndex(next);
+    restoreTake(track.id, next);
+  };
+
   const handleAddComment = (timestamp?: number) => {
     const time = timestamp ?? useStore.getState().currentTime;
     useStore.getState().setCommentDraft({ trackId: track.id, timestamp: time });
@@ -68,74 +113,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const selectedTrackId = useStore(state => state.selectedTrackId);
   const setSelectedTrackId = useStore(state => state.setSelectedTrackId);
   const currentProjectId = useStore(state => state.currentProjectId);
-  const allComments = useStore(state => state.comments);
   const isSelected = selectedTrackId === track.id;
-  const [draftText, setDraftText] = React.useState("");
-  const [memberHandles, setMemberHandles] = React.useState<string[]>([]);
-  const [acSuggestions, setAcSuggestions] = React.useState<{ type: 'mention' | 'tag'; items: string[] } | null>(null);
-  const [acIndex, setAcIndex] = React.useState(0);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const allTags = React.useMemo(
-    () => [...new Set(allComments.flatMap(c => c.tags || []))].sort(),
-    [allComments]
-  );
-
-  // Load project members once when the draft for this track opens
-  useEffect(() => {
-    if (commentDraft?.trackId !== track.id) return;
-    const pid = currentProjectId || 'local';
-    storageService.getMembers(pid).then(members => {
-      setMemberHandles(members.map(m => mentionHandle(m.name || m.userId)));
-    }).catch(() => {});
-  }, [commentDraft?.trackId, track.id, currentProjectId]);
-
-  const submitComment = () => {
-    if (draftText.trim() && commentDraft) {
-      addComment(track.id, commentDraft.timestamp, draftText.trim());
-      setCommentDraft(null);
-      setDraftText("");
-      setAcSuggestions(null);
-    }
-  };
-
-  const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setDraftText(val);
-    const cursor = e.target.selectionStart ?? val.length;
-    const ac = getAutocompleteQuery(val, cursor);
-    if (ac) {
-      const q = ac.query.toLowerCase();
-      const items = ac.type === 'mention'
-        ? memberHandles.filter(h => h.toLowerCase().startsWith(q))
-        : allTags.filter(t => t.startsWith(q));
-      setAcSuggestions(items.length > 0 ? { type: ac.type, items } : null);
-      setAcIndex(0);
-    } else {
-      setAcSuggestions(null);
-    }
-  };
-
-  const acceptSuggestion = (item: string) => {
-    const cursor = textareaRef.current?.selectionStart ?? draftText.length;
-    const before = draftText.slice(0, cursor);
-    const after = draftText.slice(cursor);
-    const triggerMatch = before.match(/[@#]\w*$/);
-    if (!triggerMatch) return;
-    const trigger = triggerMatch[0][0];
-    const replacement = `${trigger}${item} `;
-    const newText = before.slice(0, before.length - triggerMatch[0].length) + replacement + after;
-    setDraftText(newText);
-    setAcSuggestions(null);
-    // restore focus + move cursor after replacement
-    requestAnimationFrame(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        const pos = before.length - triggerMatch[0].length + replacement.length;
-        textareaRef.current.setSelectionRange(pos, pos);
-      }
-    });
-  };
 
   const canManageFreeze = currentUser?.id === track.ownerId || currentUserRole === 'owner';
   const canEdit = !track.isFrozen || canManageFreeze;
@@ -158,8 +136,10 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   };
 
   return (
-    <div 
-      className={`flex h-32 border-b border-[var(--color-border-main)] group relative w-full ${commentDraft?.trackId === track.id ? 'z-50' : ''} ${isSelected ? 'bg-[var(--color-accent)]/[0.08]' : 'bg-transparent'}`} 
+    <div
+      role="region"
+      aria-label={`Track: ${track.name}`}
+      className={`flex h-32 border-b border-[var(--color-border-main)] group relative w-full ${commentDraft?.trackId === track.id ? 'z-50' : ''} ${isSelected ? 'bg-[var(--color-accent)]/[0.08]' : 'bg-transparent'}`}
       id={`track-${track.id}`}
       onClick={() => selectTrackByReference(track.id)}
     >
@@ -178,6 +158,8 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             {canManageFreeze && (
               <button
                 onClick={(e) => { e.stopPropagation(); toggleFreezeTrack(track.id); }}
+                aria-label={track.isFrozen ? `Unfreeze ${track.name}` : `Freeze ${track.name}`}
+                aria-pressed={track.isFrozen}
                 className={`p-1.5 rounded transition-colors ${track.isFrozen ? 'text-sky-400 hover:text-sky-300 hover:bg-[var(--color-bg-input)]' : 'text-[var(--color-text-muted)] hover:text-sky-400 hover:bg-[var(--color-bg-input)]'}`}
                 title={track.isFrozen ? 'Unfreeze track' : 'Freeze track'}
               >
@@ -186,6 +168,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             )}
             <button
               onClick={() => handleAddComment()}
+              aria-label={`Add comment to ${track.name} at playhead`}
               className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-input)] rounded transition-colors"
               title="Add comment at playhead"
             >
@@ -193,7 +176,29 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             </button>
             {canEdit && (
               <button
+                onClick={handleSaveTake}
+                aria-label={`Save take for ${track.name}`}
+                className="p-1.5 text-[var(--color-text-muted)] hover:text-purple-400 hover:bg-[var(--color-bg-input)] rounded transition-colors"
+                title="Save take"
+              >
+                <Layers size={14} />
+              </button>
+            )}
+            {track.buffer && (
+              <button
+                onClick={handleExportStem}
+                disabled={isExporting}
+                aria-label={`Export ${track.name} as WAV`}
+                className="p-1.5 text-[var(--color-text-muted)] hover:text-sky-400 hover:bg-[var(--color-bg-input)] rounded transition-colors disabled:opacity-40"
+                title="Export stem as WAV"
+              >
+                <Download size={14} />
+              </button>
+            )}
+            {canEdit && (
+              <button
                 onClick={() => removeTrackByReference(track.id)}
+                aria-label={`Remove track ${track.name}`}
                 className="p-1.5 text-[var(--color-text-dark)] hover:text-red-500 hover:bg-[var(--color-bg-input)] rounded transition-colors"
                 title="Remove track"
               >
@@ -210,6 +215,8 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                 if (track.isMuted) updateTrack(track.id, { isMuted: false });
                 else muteTrackByReference(track.id);
               }}
+              aria-label={track.isMuted ? `Unmute ${track.name}` : `Mute ${track.name}`}
+              aria-pressed={track.isMuted}
               className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isMuted ? 'bg-[var(--color-accent-purple)]/20 border-[var(--color-accent-purple)] text-[var(--color-accent-purple)]' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               M
@@ -219,9 +226,26 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                 if (track.isSoloed) updateTrack(track.id, { isSoloed: false });
                 else soloTrackByReference(track.id);
               }}
+              aria-label={track.isSoloed ? `Unsolo ${track.name}` : `Solo ${track.name}`}
+              aria-pressed={track.isSoloed}
               className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${track.isSoloed ? 'bg-[var(--color-accent)] border-black text-black' : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-[#E0E0E0]'}`}
             >
               S
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); armTrack(track.id, !track.isArmed); }}
+              aria-label={track.isArmed ? `Disarm ${track.name}` : `Arm ${track.name} for recording`}
+              aria-pressed={!!track.isArmed}
+              title={track.isArmed ? 'Disarm track' : 'Arm for recording'}
+              className={`w-8 h-8 rounded text-[10px] font-bold border transition-all ${
+                isRecording && track.isArmed
+                  ? 'bg-red-500 border-red-600 text-white animate-pulse'
+                  : track.isArmed
+                  ? 'bg-red-500/20 border-red-500 text-red-400'
+                  : 'bg-[var(--color-bg-input)] border-[var(--color-border-inner)] text-[var(--color-text-muted)] hover:text-red-400'
+              }`}
+            >
+              R
             </button>
           </div>
           {track.isFrozen && !canManageFreeze && (
@@ -234,6 +258,32 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
           )}
         </div>
 
+        {takes.length > 0 && (
+          <div className="flex items-center gap-1" role="group" aria-label={`Takes for ${track.name}`}>
+            <button
+              onClick={handlePrevTake}
+              disabled={activeTakeIndex === 0}
+              aria-label="Previous take"
+              className="p-0.5 rounded text-[var(--color-text-muted)] hover:text-purple-400 disabled:opacity-30 transition-colors"
+              title="Previous take"
+            >
+              <ChevronLeft size={12} />
+            </button>
+            <span className="text-[9px] font-mono font-bold text-purple-400 tracking-tight" aria-live="polite" aria-atomic="true">
+              T{activeTakeIndex !== null ? activeTakeIndex + 1 : takes.length}/{takes.length}
+            </span>
+            <button
+              onClick={handleNextTake}
+              disabled={activeTakeIndex !== null && activeTakeIndex >= takes.length - 1}
+              aria-label="Next take"
+              className="p-0.5 rounded text-[var(--color-text-muted)] hover:text-purple-400 disabled:opacity-30 transition-colors"
+              title="Next take"
+            >
+              <ChevronRight size={12} />
+            </button>
+          </div>
+        )}
+
         <div className="space-y-1">
           <div className="relative h-2 bg-[var(--color-bg-input)] rounded-full overflow-hidden border border-[var(--color-border-main)]">
             <div
@@ -245,6 +295,8 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
               min="0" max="1" step="0.01"
               value={track.volume}
               disabled={!canEdit}
+              aria-label={`Volume for ${track.name}`}
+              aria-valuetext={`${Math.round(track.volume * 100)}%`}
               onChange={(e) => { if (canEdit) updateTrack(track.id, { volume: parseFloat(e.target.value) }); }}
               className={`absolute inset-0 opacity-0 w-full ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed'}`}
             />
@@ -490,69 +542,13 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
         ))}
       </div>
 
-      {/* Comment Draft Overlay - Moved OUTSIDE overflow-hidden container */}
       {commentDraft?.trackId === track.id && (
-        <div 
-          className="absolute top-0 bottom-0 w-[2px] bg-[var(--color-playhead)] z-50 pointer-events-none"
-          style={{ left: 256 + ((Number(commentDraft.timestamp) || 0) * (Number(zoom) || 100)) }} // 256px is the width of track controls
-        >
-          <div className="absolute top-4 left-2 flex flex-col gap-2 bg-[var(--color-bg-surface)] border border-[var(--color-playhead)] p-3 rounded-lg shadow-2xl z-50 w-64 animate-in fade-in zoom-in duration-200 pointer-events-auto">
-            <span className="text-[10px] text-[var(--color-playhead)] font-black uppercase tracking-[0.2em]">Add Feedback</span>
-            <div className="relative">
-              <textarea
-                ref={textareaRef}
-                autoFocus
-                value={draftText}
-                onChange={handleDraftChange}
-                onKeyDown={(e) => {
-                  if (acSuggestions) {
-                    if (e.key === 'ArrowDown') { e.preventDefault(); setAcIndex(i => Math.min(i + 1, acSuggestions.items.length - 1)); return; }
-                    if (e.key === 'ArrowUp') { e.preventDefault(); setAcIndex(i => Math.max(i - 1, 0)); return; }
-                    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); acceptSuggestion(acSuggestions.items[acIndex]); return; }
-                    if (e.key === 'Escape') { setAcSuggestions(null); return; }
-                  }
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    submitComment();
-                  }
-                  if (e.key === 'Escape') {
-                    setCommentDraft(null);
-                    setDraftText("");
-                    setAcSuggestions(null);
-                  }
-                }}
-                placeholder="Type your notes... (@mention #tag)"
-                className="w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-inner)] rounded p-2 text-xs text-white focus:outline-none focus:border-[var(--color-accent)] resize-none h-20"
-              />
-              {acSuggestions && (
-                <div className="absolute bottom-full left-0 mb-1 w-full bg-[var(--color-bg-deep)] border border-[var(--color-border-main)] rounded shadow-xl z-10 overflow-hidden">
-                  {acSuggestions.items.slice(0, 6).map((item, i) => (
-                    <button
-                      key={item}
-                      onMouseDown={(e) => { e.preventDefault(); acceptSuggestion(item); }}
-                      className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
-                        i === acIndex
-                          ? acSuggestions.type === 'mention' ? 'bg-amber-400/20 text-amber-300' : 'bg-blue-400/20 text-blue-300'
-                          : 'text-white/60 hover:bg-white/5'
-                      }`}
-                    >
-                      {acSuggestions.type === 'mention' ? `@${item}` : `#${item}`}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[9px] text-[var(--color-text-muted)]">Enter to save • Esc to cancel</span>
-              <button
-                onClick={submitComment}
-                className="bg-[var(--color-playhead)] text-black px-3 py-1 rounded text-[10px] font-bold uppercase transition-transform active:scale-95"
-              >
-                Post
-              </button>
-            </div>
-          </div>
-        </div>
+        <CommentDraftOverlay
+          track={track}
+          zoom={zoom}
+          timestamp={commentDraft.timestamp}
+          onDismiss={() => setCommentDraft(null)}
+        />
       )}
     </div>
 

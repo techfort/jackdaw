@@ -1,11 +1,17 @@
 import { create } from 'zustand';
 import React, { useMemo } from 'react';
 import { getSharedAudioContext } from './lib/sharedAudioContext';
+import { startCapture, RecordingSession } from './lib/recordingEngine';
+import audioBufferToWav from 'audiobuffer-to-wav';
 import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind, Reply } from './types';
 import { ConcurrentUpdateError } from './services/storage/types';
 import { storageService, authService } from './services/storage';
 import { parseMentions, parseTags } from './lib/mentionUtils';
 import { logTelemetryEvent } from './lib/telemetry';
+import { clamp } from './lib/clamp';
+import { getTracksMaxTime } from './lib/clipUtils';
+import { canManageFrozenTrack, FREEZE_EXEMPT_KEYS } from './lib/freezeGuard';
+import { getActorInfo } from './lib/actorInfo';
 
 
 interface HistoryState {
@@ -19,24 +25,26 @@ const generateId = () => {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 };
 
+let _recordSession: RecordingSession | null = null;
+let _recordStartTime = 0;
+
 export const useStore = create<DAWState>((set, get) => {
   const past: HistoryState[] = [];
   const future: HistoryState[] = [];
 
-  const pushToHistory = () => {
+  const snapshotState = (): HistoryState => {
     const { tracks, comments, tempo } = get();
-    past.push({ 
-      // Deep clone where necessary (tracks and comments are arrays of objects)
-      tracks: tracks.map(t => ({ 
-        ...t, 
-        clips: (t.clips || []).map(c => ({ ...c })) 
-      })),
+    return {
+      tracks: tracks.map(t => ({ ...t, clips: (t.clips || []).map(c => ({ ...c })) })),
       comments: comments.map(c => ({ ...c })),
-      tempo 
-    });
-    // Cap history
+      tempo,
+    };
+  };
+
+  const pushToHistory = () => {
+    past.push(snapshotState());
     if (past.length > 50) past.shift();
-    future.length = 0; // Clear redo stack on new action
+    future.length = 0;
   };
 
   return {
@@ -66,6 +74,11 @@ export const useStore = create<DAWState>((set, get) => {
     showMixer: false,
     isSpectrumOpen: false,
     isClickEnabled: false,
+    isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    pendingWriteCount: 0,
+    availableInputDevices: [],
+    selectedInputDeviceId: null,
+    isRecording: false,
     currentUser: null,
     activityEvents: [],
     seenCommentIds: [],
@@ -86,17 +99,15 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     addReply: (commentId, text) => {
-      const user = get().currentUser;
-      const userId = user?.id || 'anonymous';
-      const userName = user?.name || 'Musician';
+      const actor = getActorInfo(get().currentUser);
       const id = generateId();
-      const reply: Reply = { id, commentId, text, userId, userName, createdAt: Date.now(), mentions: parseMentions(text) };
+      const reply: Reply = { id, commentId, text, userId: actor.userId, userName: actor.userName, createdAt: Date.now(), mentions: parseMentions(text) };
       pushToHistory();
       set((state) => ({
         comments: state.comments.map(c => c.id === commentId ? { ...c, replies: [...(c.replies || []), reply] } : c),
         canUndo: true,
       }));
-      get().addActivityEvent({ kind: 'comment_added', actor: { userId, userName }, timestamp: Date.now(), payload: { commentId, replyId: id, text: text.slice(0, 100), isReply: true } });
+      get().addActivityEvent({ kind: 'comment_added', actor, timestamp: Date.now(), payload: { commentId, replyId: id, text: text.slice(0, 100), isReply: true } });
       get().pushUpdate().catch(err => console.error('Update failed', err));
       return id;
     },
@@ -104,7 +115,74 @@ export const useStore = create<DAWState>((set, get) => {
     setCurrentUser: (user) => set({ currentUser: user }),
     setSpectrumOpen: (open) => set({ isSpectrumOpen: open }),
     setClickEnabled: (enabled) => set({ isClickEnabled: enabled }),
+    setOnline: (online) => set({ isOnline: online }),
+    setAvailableInputDevices: (devices) => set({ availableInputDevices: devices }),
+    setSelectedInputDeviceId: (deviceId) => set({ selectedInputDeviceId: deviceId }),
     setSelectedTrackId: (id) => set({ selectedTrackId: id }),
+
+    armTrack: (trackId, armed) => {
+      set((state) => ({
+        tracks: state.tracks.map(t => t.id === trackId ? { ...t, isArmed: armed } : t),
+      }));
+    },
+
+    startRecording: async () => {
+      const { selectedInputDeviceId, tracks, isRecording } = get();
+      if (isRecording || _recordSession) return;
+      if (!tracks.some(t => t.isArmed)) return;
+      try {
+        _recordSession = await startCapture(selectedInputDeviceId);
+        _recordStartTime = get().currentTime;
+        set({ isRecording: true });
+      } catch (err) {
+        console.error('Failed to start recording:', err);
+        throw err;
+      }
+    },
+
+    stopRecording: async () => {
+      if (!_recordSession) return;
+      const session = _recordSession;
+      _recordSession = null;
+      set({ isRecording: false });
+      try {
+        const buffer = await session.stop();
+        if (buffer.duration < 0.05) return;
+        const wav: ArrayBuffer = audioBufferToWav(buffer);
+        const armedTracks = get().tracks.filter(t => t.isArmed);
+        for (const track of armedTracks) {
+          get().addRecordedClip(track.id, buffer, wav, _recordStartTime);
+        }
+      } catch (err) {
+        console.error('Failed to stop recording:', err);
+      }
+    },
+
+    addRecordedClip: (trackId, buffer, audioData, offset) => {
+      pushToHistory();
+      set((state) => ({
+        tracks: state.tracks.map(t => {
+          if (t.id !== trackId) return t;
+          return {
+            ...t,
+            buffer,
+            audioData,
+            clips: [
+              ...(t.clips || []),
+              {
+                id: generateId(),
+                offset,
+                duration: buffer.duration,
+                audioStart: 0,
+                isMuted: false,
+              },
+            ],
+          };
+        }),
+        canUndo: true,
+      }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
     clearSong: () => {
       set({ currentSongId: null, currentSongName: 'Untitled Song', tracks: [], comments: [], isPlaying: false, isSyncing: false });
     },
@@ -137,18 +215,7 @@ export const useStore = create<DAWState>((set, get) => {
     goToStart: () => set({ currentTime: 0 }),
 
     goToEnd: () => {
-      const { tracks } = get();
-      let maxTime = 0;
-      tracks.forEach(track => {
-        (track.clips || []).forEach(clip => {
-          const off = Number(clip.offset) || 0;
-          const dur = Number(clip.duration) || 0;
-          if (!isNaN(off) && !isNaN(dur)) {
-            maxTime = Math.max(maxTime, off + dur);
-          }
-        });
-      });
-      set({ currentTime: Math.max(0, maxTime) });
+      set({ currentTime: getTracksMaxTime(get().tracks) });
     },
 
     loadSong: (projectState) => {
@@ -235,8 +302,13 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     pushUpdate: async () => {
-      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo, lastRemoteUpdate } = get();
+      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo, lastRemoteUpdate, isOnline } = get();
       if (!isSyncing || !currentProjectId || !currentSongId) return;
+
+      if (!isOnline) {
+        set(state => ({ pendingWriteCount: state.pendingWriteCount + 1 }));
+        return;
+      }
 
       const now = Date.now();
       const baseUpdatedAt = lastRemoteUpdate;
@@ -306,30 +378,14 @@ export const useStore = create<DAWState>((set, get) => {
 
     undo: () => {
       if (past.length === 0) return;
-      const current = {
-        tracks: get().tracks.map(t => ({ 
-          ...t, 
-          clips: (t.clips || []).map(c => ({ ...c })) 
-        })),
-        comments: get().comments.map(c => ({ ...c })),
-        tempo: get().tempo
-      };
-      future.push(current);
+      future.push(snapshotState());
       const previous = past.pop()!;
       set({ ...previous, canUndo: past.length > 0, canRedo: true });
     },
 
     redo: () => {
       if (future.length === 0) return;
-      const current = {
-        tracks: get().tracks.map(t => ({ 
-          ...t, 
-          clips: (t.clips || []).map(c => ({ ...c })) 
-        })),
-        comments: get().comments.map(c => ({ ...c })),
-        tempo: get().tempo
-      };
-      past.push(current);
+      past.push(snapshotState());
       const next = future.pop()!;
       set({ ...next, canUndo: true, canRedo: future.length > 0 });
     },
@@ -360,7 +416,7 @@ export const useStore = create<DAWState>((set, get) => {
         canUndo: true
       }));
       const u = get().currentUser;
-      get().addActivityEvent({ kind: 'track_added', actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { trackName: name } });
+      get().addActivityEvent({ kind: 'track_added', actor: getActorInfo(u), timestamp: Date.now(), payload: { trackName: name } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
@@ -390,7 +446,7 @@ export const useStore = create<DAWState>((set, get) => {
         canUndo: true
       }));
       const u = get().currentUser;
-      get().addActivityEvent({ kind: 'track_added', actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { trackName: trimmedName } });
+      get().addActivityEvent({ kind: 'track_added', actor: getActorInfo(u), timestamp: Date.now(), payload: { trackName: trimmedName } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
       return newTrackId;
     },
@@ -398,10 +454,7 @@ export const useStore = create<DAWState>((set, get) => {
     splitTrack: (trackId, timelineTime) => {
       const { currentUser, currentUserRole } = get();
       const frozen = get().tracks.find(t => t.id === trackId);
-      if (frozen?.isFrozen) {
-        const canManage = currentUser?.id === frozen.ownerId || currentUserRole === 'owner';
-        if (!canManage) return;
-      }
+      if (frozen?.isFrozen && !canManageFrozenTrack(frozen, currentUser, currentUserRole)) return;
       pushToHistory();
       set((state) => {
         const track = state.tracks.find(t => t.id === trackId);
@@ -445,14 +498,13 @@ export const useStore = create<DAWState>((set, get) => {
       const { currentUser, currentUserRole } = get();
       const track = get().tracks.find(t => t.id === id);
       if (!track) return;
-      const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
-      if (!canManage) return;
+      if (!canManageFrozenTrack(track, currentUser, currentUserRole)) return;
       const nowFrozen = !track.isFrozen;
       get().updateTrack(id, { isFrozen: nowFrozen });
       const u = currentUser;
       get().addActivityEvent({
         kind: nowFrozen ? 'track_frozen' : 'track_unfrozen',
-        actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' },
+        actor: getActorInfo(u),
         timestamp: Date.now(),
         payload: { trackId: id, trackName: track.name },
       });
@@ -461,10 +513,7 @@ export const useStore = create<DAWState>((set, get) => {
     removeTrack: (id) => {
       const { currentUser, currentUserRole } = get();
       const track = get().tracks.find(t => t.id === id);
-      if (track?.isFrozen) {
-        const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
-        if (!canManage) return;
-      }
+      if (track?.isFrozen && !canManageFrozenTrack(track, currentUser, currentUserRole)) return;
       const trackName = track?.name;
       pushToHistory();
       set((state) => ({
@@ -473,20 +522,54 @@ export const useStore = create<DAWState>((set, get) => {
         canUndo: true
       }));
       const u = get().currentUser;
-      get().addActivityEvent({ kind: 'track_removed', actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { trackId: id, trackName: trackName || '' } });
+      get().addActivityEvent({ kind: 'track_removed', actor: getActorInfo(u), timestamp: Date.now(), payload: { trackId: id, trackName: trackName || '' } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
+    },
+
+    saveTake: (trackId) => {
+      pushToHistory();
+      set((state) => ({
+        tracks: state.tracks.map(t => {
+          if (t.id !== trackId) return t;
+          const snapshot = (t.clips || []).map(c => ({ ...c }));
+          return { ...t, takes: [...(t.takes || []), snapshot], canUndo: true };
+        }),
+        canUndo: true,
+      }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+
+    restoreTake: (trackId, takeIndex) => {
+      const track = get().tracks.find(t => t.id === trackId);
+      if (!track || !track.takes?.[takeIndex]) return;
+      pushToHistory();
+      const restoredClips = track.takes[takeIndex].map(c => ({ ...c }));
+      set((state) => ({
+        tracks: state.tracks.map(t => t.id === trackId ? { ...t, clips: restoredClips } : t),
+        canUndo: true,
+      }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+
+    deleteTake: (trackId, takeIndex) => {
+      pushToHistory();
+      set((state) => ({
+        tracks: state.tracks.map(t => {
+          if (t.id !== trackId) return t;
+          const next = (t.takes || []).filter((_, i) => i !== takeIndex);
+          return { ...t, takes: next };
+        }),
+        canUndo: true,
+      }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
     },
 
     updateTrack: (id, updates, silent = false) => {
       const { currentUser, currentUserRole } = get();
       const track = get().tracks.find(t => t.id === id);
       if (track?.isFrozen) {
-        const freezeExempt = new Set(['isMuted', 'isSoloed', 'isFrozen']);
-        const hasRestrictedKeys = Object.keys(updates).some(k => !freezeExempt.has(k));
-        if (hasRestrictedKeys) {
-          const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
-          if (!canManage) return;
-        }
+        const hasRestrictedKeys = Object.keys(updates).some(k => !FREEZE_EXEMPT_KEYS.has(k));
+        if (hasRestrictedKeys && !canManageFrozenTrack(track, currentUser, currentUserRole)) return;
       }
       if (!silent) pushToHistory();
       set((state) => ({
@@ -499,10 +582,7 @@ export const useStore = create<DAWState>((set, get) => {
     updateClip: (trackId, clipId, updates, silent = false) => {
       const { currentUser, currentUserRole } = get();
       const track = get().tracks.find(t => t.id === trackId);
-      if (track?.isFrozen) {
-        const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
-        if (!canManage) return;
-      }
+      if (track?.isFrozen && !canManageFrozenTrack(track, currentUser, currentUserRole)) return;
       if (!silent) pushToHistory();
       set((state) => ({
         tracks: state.tracks.map(t => {
@@ -520,10 +600,7 @@ export const useStore = create<DAWState>((set, get) => {
     removeClip: (trackId, clipId) => {
       const { currentUser, currentUserRole } = get();
       const track = get().tracks.find(t => t.id === trackId);
-      if (track?.isFrozen) {
-        const canManage = currentUser?.id === track.ownerId || currentUserRole === 'owner';
-        if (!canManage) return;
-      }
+      if (track?.isFrozen && !canManageFrozenTrack(track, currentUser, currentUserRole)) return;
       pushToHistory();
       set((state) => ({
         tracks: state.tracks.map(t => {
@@ -540,9 +617,7 @@ export const useStore = create<DAWState>((set, get) => {
 
     addComment: (trackId, timestamp, text) => {
       pushToHistory();
-      const user = get().currentUser;
-      const userId = user?.id || 'anonymous';
-      const userName = user?.name || 'Musician';
+      const actor = getActorInfo(get().currentUser);
       const existingIds = get().comments.map(c => c.id);
       const maxNumericId = existingIds.reduce((max, id) => {
         const parsed = Number(id);
@@ -552,15 +627,15 @@ export const useStore = create<DAWState>((set, get) => {
       while (existingIds.includes(nextCommentId)) {
         nextCommentId = String(Number(nextCommentId) + 1);
       }
-      
+
       set((state) => ({
         comments: [...state.comments, {
           id: nextCommentId,
           trackId,
           timestamp,
           text,
-          userId,
-          userName,
+          userId: actor.userId,
+          userName: actor.userName,
           status: 'open' as const,
           createdAt: Date.now(),
           mentions: parseMentions(text),
@@ -568,8 +643,7 @@ export const useStore = create<DAWState>((set, get) => {
         }],
         canUndo: true
       }));
-      const u2 = get().currentUser;
-      get().addActivityEvent({ kind: 'comment_added', actor: { userId: u2?.id || userId, userName: u2?.name || userName }, timestamp: Date.now(), payload: { commentId: nextCommentId, trackId, text: text.slice(0, 100), mentions: parseMentions(text), tags: parseTags(text) } });
+      get().addActivityEvent({ kind: 'comment_added', actor, timestamp: Date.now(), payload: { commentId: nextCommentId, trackId, text: text.slice(0, 100), mentions: parseMentions(text), tags: parseTags(text) } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
       return nextCommentId;
     },
@@ -584,7 +658,7 @@ export const useStore = create<DAWState>((set, get) => {
       const newStatus = get().comments.find(c => c.id === id)?.status;
       const u = get().currentUser;
       const kind: ActivityEventKind = newStatus === 'approved' ? 'comment_resolved' : 'comment_reopened';
-      get().addActivityEvent({ kind, actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { commentId: id, from: prevStatus, to: newStatus } });
+      get().addActivityEvent({ kind, actor: getActorInfo(u), timestamp: Date.now(), payload: { commentId: id, from: prevStatus, to: newStatus } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
@@ -597,7 +671,7 @@ export const useStore = create<DAWState>((set, get) => {
       }));
       const u = get().currentUser;
       const kind: ActivityEventKind = status === 'approved' ? 'comment_resolved' : prevStatus === 'approved' ? 'comment_reopened' : 'comment_status_changed';
-      get().addActivityEvent({ kind, actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { commentId: id, from: prevStatus, to: status } });
+      get().addActivityEvent({ kind, actor: getActorInfo(u), timestamp: Date.now(), payload: { commentId: id, from: prevStatus, to: status } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
@@ -609,7 +683,7 @@ export const useStore = create<DAWState>((set, get) => {
         canUndo: true
       }));
       const u = get().currentUser;
-      get().addActivityEvent({ kind: 'comment_resolved', actor: { userId: u?.id || 'anonymous', userName: u?.name || 'Musician' }, timestamp: Date.now(), payload: { commentIds: ids, count: ids.length } });
+      get().addActivityEvent({ kind: 'comment_resolved', actor: getActorInfo(u), timestamp: Date.now(), payload: { commentIds: ids, count: ids.length } });
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
@@ -622,12 +696,12 @@ export const useStore = create<DAWState>((set, get) => {
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
 
-    setZoom: (zoom) => set({ zoom: isNaN(zoom) ? 100 : Math.max(0.5, Math.min(500, zoom)) }),
+    setZoom: (zoom) => set({ zoom: isNaN(zoom) ? 100 : clamp(zoom, 0.5, 500) }),
     setTempo: (tempo) => {
       const val = Number(tempo);
       if (isNaN(val)) return;
       pushToHistory();
-      const safeTempo = Math.max(20, Math.min(300, val));
+      const safeTempo = clamp(val, 20, 300);
       set({ tempo: safeTempo, canUndo: true });
       get().pushUpdate().catch(err => console.error("Update failed", err));
     },
@@ -641,18 +715,8 @@ export const useStore = create<DAWState>((set, get) => {
 export const useProjectDuration = () => {
   const tracks = useStore(state => state.tracks);
   const currentTime = useStore(state => state.currentTime);
-  
   return useMemo(() => {
-    let max = 0;
-    tracks.forEach(track => {
-      (track.clips || []).forEach(clip => {
-        const offset = Number(clip.offset) || 0;
-        const duration = Number(clip.duration) || 0;
-        if (!isNaN(offset) && !isNaN(duration)) {
-          max = Math.max(max, offset + duration);
-        }
-      });
-    });
+    const max = getTracksMaxTime(tracks);
     const safeCurrentTime = Number(currentTime) || 0;
     return Math.max(max + 10, safeCurrentTime + 10, 60);
   }, [tracks, currentTime]);

@@ -104,3 +104,62 @@ export const exportMixdown = async (
 
   return { filename, durationS: renderedBuffer.duration, expectedDurationS: totalDuration, renderTimeMs };
 };
+
+export const exportStem = async (track: TrackData): Promise<ExportResult | null> => {
+  if (!track.buffer || (track.clips || []).length === 0) return null;
+
+  const tEnd = Math.max(
+    ...(track.clips || []).map(c => Number(c.offset) + Number(c.duration)),
+    0
+  );
+  if (tEnd <= 0 || !isFinite(tEnd)) return null;
+
+  const { sampleRate } = track.buffer;
+  const lengthInSamples = Math.ceil(tEnd * sampleRate);
+  if (lengthInSamples <= 0) return null;
+
+  const offlineCtx = new OfflineAudioContext(2, lengthInSamples, sampleRate);
+
+  (track.clips || []).forEach(clip => {
+    if (clip.isMuted) return;
+
+    const cStart = Number(clip.offset);
+    const cAudioStart = Number(clip.audioStart) || 0;
+    const cDuration = Number(clip.duration);
+
+    if (!isFinite(cStart) || !isFinite(cDuration) || cDuration <= 0) return;
+
+    const source = offlineCtx.createBufferSource();
+    source.buffer = track.buffer!;
+
+    const gain = offlineCtx.createGain();
+    gain.gain.value = Number(track.volume) || 1;
+
+    source.connect(gain);
+    gain.connect(offlineCtx.destination);
+
+    try {
+      source.start(cStart, cAudioStart, cDuration);
+    } catch (e) {
+      console.error('exportStem: failed to start source', e);
+    }
+  });
+
+  const renderStart = performance.now();
+  const renderedBuffer = await offlineCtx.startRendering();
+  const renderTimeMs = Math.round(performance.now() - renderStart);
+
+  const wav = audioBufferToWav(renderedBuffer);
+  const blob = new Blob([wav], { type: 'audio/wav' });
+  const safeName = track.name.replace(/[^a-z0-9_-]/gi, '_');
+  const filename = `jackdaw-stem-${safeName}-${Date.now()}.wav`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  return { filename, durationS: renderedBuffer.duration, expectedDurationS: tEnd, renderTimeMs };
+};
