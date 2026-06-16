@@ -26,7 +26,7 @@ import { CommandTerminal } from './components/CommandTerminal';
 import { AudioSpectrumWindow } from './components/AudioSpectrumWindow';
 import { CheatSheetBar } from './components/CheatSheetBar';
 import { checkBrowserCompat } from './lib/browserCompat';
-import { Users, LayoutDashboard } from 'lucide-react';
+import { Users, LayoutDashboard, PlusCircle } from 'lucide-react';
 
 const compatIssues = checkBrowserCompat();
 const criticalCompatIssues = compatIssues.filter(i => i.severity === 'error');
@@ -97,6 +97,7 @@ export default function App() {
   const remotePresences = useStore(state => state.remotePresences);
   const setMarker = useStore(state => state.setMarker);
   const goToStart = useStore(state => state.goToStart);
+  const addEmptyTrack = useStore(state => state.addEmptyTrack);
   const goToEnd = useStore(state => state.goToEnd);
   const seek = useStore(state => state.seek);
   const markers = useStore(state => state.markers);
@@ -404,16 +405,27 @@ export default function App() {
               {tracks.length === 0 ? (
                 <div className="flex flex-col border-b border-[var(--color-border-main)] h-32 group relative">
                    <div className="w-64 bg-[var(--color-bg-sidebar)] border-r border-[var(--color-border-main)] p-4 flex flex-col justify-center shrink-0 z-20 sticky left-0 shadow-2xl">
-                     <button 
-                       onClick={() => {
-                         const btn = document.querySelector('button[title^="Import Stems"]') as HTMLButtonElement;
-                         if (btn) btn.click();
-                       }}
-                       className="w-full py-3 border-2 border-dashed border-[var(--color-border-main)] rounded-lg text-[var(--color-text-dark)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent)]/5 transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
-                     >
-                        <span className="text-lg">+</span>
-                        Import First Stem
-                     </button>
+                     <div className="flex flex-col gap-2 w-full">
+                       <button
+                         onClick={() => {
+                           const btn = document.querySelector('button[title^="Import Stems"]') as HTMLButtonElement;
+                           if (btn) btn.click();
+                         }}
+                         className="w-full py-3 border-2 border-dashed border-[var(--color-border-main)] rounded-lg text-[var(--color-text-dark)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent)]/5 transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                       >
+                         <span className="text-lg">+</span>
+                         Import First Stem
+                       </button>
+                       <button
+                         onClick={() => addEmptyTrack(`Track 1`)}
+                         className="w-full py-3 border-2 border-dashed border-[var(--color-border-main)] rounded-lg text-[var(--color-text-dark)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent)]/5 transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                         title="Add an empty track for recording"
+                         aria-label="Add empty track"
+                       >
+                         <PlusCircle size={14} />
+                         New Empty Track
+                       </button>
+                     </div>
                    </div>
                    <div className="flex-1 flex items-center justify-center bg-[var(--color-bg-deep)]/40 italic text-[11px] uppercase font-bold tracking-[0.2em] text-[var(--color-text-dark)]/50">
                       Drop audio stems here to begin your session
@@ -428,16 +440,25 @@ export default function App() {
                   
                   {/* Add more stems button slot - appears after last track */}
                   <div className="flex h-24 border-b border-[var(--color-border-main)] group relative">
-                    <div className="w-64 bg-[var(--color-bg-sidebar)] border-r border-[var(--color-border-main)] p-4 flex flex-col justify-center shrink-0 z-20 sticky left-0">
-                      <button 
+                    <div className="w-64 bg-[var(--color-bg-sidebar)] border-r border-[var(--color-border-main)] p-4 flex flex-col gap-1.5 justify-center shrink-0 z-20 sticky left-0">
+                      <button
                         onClick={() => {
                           const btn = document.querySelector('button[title^="Import Stems"]') as HTMLButtonElement;
                           if (btn) btn.click();
                         }}
-                        className="w-full py-2.5 border border-dashed border-[var(--color-border-main)] rounded-lg text-[var(--color-text-dark)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent)]/5 transition-all flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest"
+                        className="w-full py-2 border border-dashed border-[var(--color-border-main)] rounded-lg text-[var(--color-text-dark)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent)]/5 transition-all flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-widest"
                       >
-                         <span className="text-base leading-none">+</span>
-                         Import Stem
+                        <span className="text-base leading-none">+</span>
+                        Import Stem
+                      </button>
+                      <button
+                        onClick={() => addEmptyTrack(`Track ${tracks.length + 1}`)}
+                        className="w-full py-2 border border-dashed border-[var(--color-border-main)] rounded-lg text-[var(--color-text-dark)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent)]/5 transition-all flex items-center justify-center gap-1.5 text-[9px] font-black uppercase tracking-widest"
+                        title="Add an empty track for recording"
+                        aria-label="Add empty track"
+                      >
+                        <PlusCircle size={12} />
+                        New Track
                       </button>
                     </div>
                     <div className="flex-1 bg-[var(--color-bg-deep)]/20" />
