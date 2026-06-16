@@ -26,20 +26,20 @@ export const exportMixdown = async (
   const totalDuration = Math.max(0, tEnd - tStart);
   if (totalDuration <= 0 || !isFinite(totalDuration)) return null;
 
-  const sampleRate = tracks[0].buffer?.sampleRate || 44100;
+  const sampleRate = tracks.flatMap(t => t.clips || []).find(c => c.buffer)?.buffer?.sampleRate ?? 44100;
   const lengthInSamples = Math.ceil(totalDuration * sampleRate);
   if (isNaN(lengthInSamples) || lengthInSamples <= 0) return null;
 
   const offlineCtx = new OfflineAudioContext(2, lengthInSamples, sampleRate);
 
-  tracks.forEach(track => {
-    if (!track.buffer || track.isMuted) return;
+  const isSoloedSomewhere = tracks.some(t => t.isSoloed);
 
-    const isSoloedSomewhere = tracks.some(t => t.isSoloed);
+  tracks.forEach(track => {
+    if (track.isMuted) return;
     if (isSoloedSomewhere && !track.isSoloed) return;
 
     (track.clips || []).forEach(clip => {
-      if (clip.isMuted) return;
+      if (clip.isMuted || !clip.buffer) return;
 
       const cStart = Number(clip.offset);
       const cEnd = Number(clip.offset) + Number(clip.duration);
@@ -55,7 +55,7 @@ export const exportMixdown = async (
       if (overlapDuration <= 0 || !isFinite(overlapDuration)) return;
 
       const source = offlineCtx.createBufferSource();
-      source.buffer = track.buffer;
+      source.buffer = clip.buffer;
 
       const gain = offlineCtx.createGain();
       gain.gain.value = Number(track.volume) || 0;
@@ -106,7 +106,8 @@ export const exportMixdown = async (
 };
 
 export const exportStem = async (track: TrackData): Promise<ExportResult | null> => {
-  if (!track.buffer || (track.clips || []).length === 0) return null;
+  const clipsWithAudio = (track.clips || []).filter(c => !c.isMuted && c.buffer);
+  if (clipsWithAudio.length === 0) return null;
 
   const tEnd = Math.max(
     ...(track.clips || []).map(c => Number(c.offset) + Number(c.duration)),
@@ -114,14 +115,14 @@ export const exportStem = async (track: TrackData): Promise<ExportResult | null>
   );
   if (tEnd <= 0 || !isFinite(tEnd)) return null;
 
-  const { sampleRate } = track.buffer;
+  const sampleRate = clipsWithAudio[0].buffer!.sampleRate;
   const lengthInSamples = Math.ceil(tEnd * sampleRate);
   if (lengthInSamples <= 0) return null;
 
   const offlineCtx = new OfflineAudioContext(2, lengthInSamples, sampleRate);
 
   (track.clips || []).forEach(clip => {
-    if (clip.isMuted) return;
+    if (clip.isMuted || !clip.buffer) return;
 
     const cStart = Number(clip.offset);
     const cAudioStart = Number(clip.audioStart) || 0;
@@ -130,7 +131,7 @@ export const exportStem = async (track: TrackData): Promise<ExportResult | null>
     if (!isFinite(cStart) || !isFinite(cDuration) || cDuration <= 0) return;
 
     const source = offlineCtx.createBufferSource();
-    source.buffer = track.buffer!;
+    source.buffer = clip.buffer;
 
     const gain = offlineCtx.createGain();
     gain.gain.value = Number(track.volume) || 1;

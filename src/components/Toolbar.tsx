@@ -158,9 +158,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
         name: currentSongName,
         tempo,
         comments,
-        tracks: tracks.map(({ buffer, audioData, ...rest }) => ({
+        tracks: tracks.map(({ ...rest }) => ({
           ...rest,
-          clips: (rest.clips || []).map(c => ({ ...c }))
+          clips: (rest.clips || []).map(({ buffer: _buf, ...c }) => c)
         })) as any,
         updatedAt: Date.now(),
         projectId

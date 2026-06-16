@@ -48,14 +48,14 @@ export interface Clip {
   duration: number; // Playback duration in seconds
   audioStart: number; // Start point within the buffer in seconds
   isMuted: boolean;
+  buffer?: AudioBuffer | null;   // Decoded audio — not persisted, stripped before save
+  audioData?: ArrayBuffer;       // Raw bytes — kept for storage layer upload/cache
+  storagePath?: string;          // Firebase Storage URL for this clip's audio
 }
 
 export interface TrackData {
   id: string;
   name: string;
-  buffer?: AudioBuffer | null;
-  audioData?: ArrayBuffer; // Stored raw data for persistence
-  storagePath?: string;    // Firebase Storage path: audio/{projectId}/{trackId}
   volume: number; // 0 to 1
   isMuted: boolean;
   isSoloed: boolean;

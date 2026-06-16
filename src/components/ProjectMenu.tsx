@@ -52,9 +52,9 @@ export const ProjectMenu = ({ onClose }: { onClose: () => void }) => {
         name: nameToSave,
         tempo,
         comments,
-        tracks: tracks.map(({ buffer, audioData, ...rest }) => ({
+        tracks: tracks.map(({ ...rest }) => ({
           ...rest,
-          clips: (rest.clips || []).map(c => ({ ...c }))
+          clips: (rest.clips || []).map(({ buffer: _buf, ...c }) => c)
         })) as any,
         updatedAt: Date.now(),
         projectId
