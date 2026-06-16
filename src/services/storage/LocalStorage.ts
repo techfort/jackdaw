@@ -157,16 +157,17 @@ export class LocalStorageService implements StorageService {
     await db.put(PROJECTS_STORE, { ...existing, ...data, updatedAt: Date.now() });
   }
 
-  // ── Audio cache (used by FirebaseStorage download path) ──────────────────
+  // ── Audio cache (keyed by clipId since per-clip audio model) ─────────────
 
-  async cacheAudio(trackId: string, audioData: ArrayBuffer): Promise<void> {
+  async cacheAudio(id: string, audioData: ArrayBuffer): Promise<void> {
     const db = await this.db;
-    await db.put(AUDIO_CACHE_STORE, { trackId, audioData });
+    // IDB keyPath is 'trackId' (legacy field name); value is now a clip ID
+    await db.put(AUDIO_CACHE_STORE, { trackId: id, audioData });
   }
 
-  async getCachedAudio(trackId: string): Promise<ArrayBuffer | null> {
+  async getCachedAudio(id: string): Promise<ArrayBuffer | null> {
     const db = await this.db;
-    const record = await db.get(AUDIO_CACHE_STORE, trackId);
+    const record = await db.get(AUDIO_CACHE_STORE, id);
     return record?.audioData ?? null;
   }
 
