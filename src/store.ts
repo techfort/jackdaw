@@ -170,9 +170,12 @@ export const useStore = create<DAWState>((set, get) => {
       if (!_recordSession) return;
       const session = _recordSession;
       _recordSession = null;
-      set({ isRecording: false });
+      // Set isRecording false AFTER the stream fully closes so the input monitor
+      // doesn't race to open a new getUserMedia while the recording stream is still
+      // holding the device (which can cause two concurrent streams on one device).
       try {
         const buffer = await session.stop();
+        set({ isRecording: false });
         if (buffer.duration < 0.05) return;
         const wav: ArrayBuffer = audioBufferToWav(buffer);
         const armedTracks = get().tracks.filter(t => t.isArmed);
@@ -180,6 +183,7 @@ export const useStore = create<DAWState>((set, get) => {
           get().addRecordedClip(track.id, buffer, wav, _recordStartTime);
         }
       } catch (err) {
+        set({ isRecording: false });
         console.error('Failed to stop recording:', err);
       }
     },

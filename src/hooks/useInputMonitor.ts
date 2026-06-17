@@ -11,12 +11,16 @@ export function useInputMonitor(): void {
   const tracks = useStore(state => state.tracks);
   const selectedInputDeviceId = useStore(state => state.selectedInputDeviceId);
   const isMonitoring = useStore(state => state.isMonitoring);
+  const isRecording = useStore(state => state.isRecording);
 
   const hasArmedTrack = tracks.some(t => t.isArmed);
 
-  // Start/stop the monitor stream when armed tracks or device changes
+  // Stop the monitor stream during active recording to avoid two concurrent
+  // getUserMedia streams on the same device (causes resource contention / noisy captures).
+  // The stream restarts automatically once isRecording goes false (after the
+  // recording stream has been fully closed).
   useEffect(() => {
-    if (!hasArmedTrack) {
+    if (!hasArmedTrack || isRecording) {
       stopInputMonitor();
       return;
     }
@@ -31,7 +35,7 @@ export function useInputMonitor(): void {
     return () => {
       stopInputMonitor();
     };
-  }, [hasArmedTrack, selectedInputDeviceId]);
+  }, [hasArmedTrack, selectedInputDeviceId, isRecording]);
 
   // Update gain when monitoring toggle changes without restarting stream
   useEffect(() => {

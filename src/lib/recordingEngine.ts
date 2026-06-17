@@ -58,24 +58,33 @@ export async function startCapture(deviceId: string | null): Promise<RecordingSe
   const source = ctx.createMediaStreamSource(stream);
   const workletNode = new AudioWorkletNode(ctx, 'jackdaw-recorder');
 
+  // A silent gain (value=0) connected to destination is required to keep the
+  // worklet in the "actively processing" audio graph — without it, some browsers
+  // skip calling process() entirely.
+  const silentGain = ctx.createGain();
+  silentGain.gain.value = 0;
+
   const chunks: Float32Array[][] = [];
   workletNode.port.onmessage = (e: MessageEvent) => {
     chunks.push(e.data as Float32Array[]);
   };
 
   source.connect(workletNode);
-  // Not connected to destination — capturing only, not monitoring
+  workletNode.connect(silentGain);
+  silentGain.connect(ctx.destination);
 
   return {
     stream,
     stop: async (): Promise<AudioBuffer> => {
       workletNode.port.postMessage('stop');
 
-      // Give the worklet one tick to flush in-flight frames
-      await new Promise<void>(resolve => setTimeout(resolve, 50));
+      // Wait for in-flight frames to flush from the audio thread's message queue.
+      // 200ms covers 44100Hz / 128 samples ≈ 345 blocks/s → ~69 blocks of headroom.
+      await new Promise<void>(resolve => setTimeout(resolve, 200));
 
       source.disconnect();
       workletNode.disconnect();
+      silentGain.disconnect();
       stream.getTracks().forEach(t => t.stop());
 
       const channelCount = chunks[0]?.length ?? 1;
