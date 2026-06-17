@@ -159,7 +159,12 @@ export class FirebaseStorageService implements StorageService {
         clips: (track.clips || []).map(({ buffer: _buf, audioData: _ad, ...clip }: any) => clip),
       }));
       const songRef = doc(db, 'projects', projectId, 'songs', songId);
-      const payload = { ...dataWithoutBase, tracks: firestoreTracks, updatedAt: Date.now() };
+      // Use the updatedAt already computed by pushUpdate (which also set lastRemoteUpdate to
+      // the same value). Re-calling Date.now() here produces a timestamp AFTER the audio
+      // upload delay, making the Firestore doc newer than lastRemoteUpdate and causing every
+      // subsequent onSongUpdate to trigger a false "Sync conflict".
+      const updatedAt = (dataWithoutBase as any).updatedAt ?? Date.now();
+      const payload = { ...dataWithoutBase, tracks: firestoreTracks, updatedAt };
       trackFirestoreWrite(`projects/${projectId}/songs/${songId}`);
 
       if (typeof baseUpdatedAt === 'number') {
