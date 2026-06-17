@@ -101,15 +101,21 @@ export const ProjectDashboard: React.FC = () => {
       const audioCtx = getSharedAudioContext();
       const reconstitutedTracks = await Promise.all(
         (song.tracks || []).map(async (t: any) => {
-          if (t.audioData) {
-            try {
-              const buffer = await audioCtx.decodeAudioData(t.audioData.slice(0));
-              return { ...t, buffer };
-            } catch {
-              return { ...t, buffer: null };
-            }
-          }
-          return { ...t, buffer: null };
+          const clips = await Promise.all(
+            (t.clips || []).map(async (clip: any) => {
+              if (clip.audioData) {
+                try {
+                  const buffer = await audioCtx.decodeAudioData(clip.audioData.slice(0));
+                  return { ...clip, buffer };
+                } catch (e) {
+                  console.error(`Failed to decode clip ${clip.id} on track "${t.name}":`, e);
+                  return { ...clip, buffer: null };
+                }
+              }
+              return clip;
+            })
+          );
+          return { ...t, clips };
         })
       );
 
