@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import React, { useMemo } from 'react';
 import { getSharedAudioContext } from './lib/sharedAudioContext';
 import { startCapture, RecordingSession } from './lib/recordingEngine';
+import { stopInputMonitor } from './lib/inputMonitor';
 import audioBufferToWav from 'audiobuffer-to-wav';
 import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind, Reply, TempoEvent } from './types';
 import { serializeClip } from './lib/clipAudioUtils';
@@ -156,11 +157,16 @@ export const useStore = create<DAWState>((set, get) => {
       const { selectedInputDeviceId, tracks, isRecording } = get();
       if (isRecording || _recordSession) return;
       if (!tracks.some(t => t.isArmed)) return;
+      // Stop monitor stream before opening the recording stream.
+      // startCapture opens getUserMedia, and having two concurrent streams
+      // on the same device causes resource contention and silent/corrupt audio.
+      stopInputMonitor();
+      _recordStartTime = get().currentTime;
+      set({ isRecording: true });
       try {
         _recordSession = await startCapture(selectedInputDeviceId);
-        _recordStartTime = get().currentTime;
-        set({ isRecording: true });
       } catch (err) {
+        set({ isRecording: false });
         console.error('Failed to start recording:', err);
         throw err;
       }

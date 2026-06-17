@@ -99,6 +99,7 @@ export class FirebaseStorageService implements StorageService {
               }
               // Fall back to legacy track-level audio for old songs
               if (legacyAudio) return { ...clip, audioData: legacyAudio };
+              if (clip.id) console.warn(`No audio found for clip ${clip.id} (no IDB cache, no storagePath). Clip will render without waveform.`);
               return clip;
             })
           );
@@ -138,8 +139,9 @@ export class FirebaseStorageService implements StorageService {
                     const key = `projects/${projectId}/songs/${songId}/clips/${clip.id}.wav`;
                     const url = await audioStorage.upload(key, clip.audioData, 'audio/wav');
                     if (url) return { ...clip, storagePath: url };
+                    console.error(`Audio upload returned empty URL for clip ${clip.id} — storage may not be configured. Audio will only be available from local IDB cache.`);
                   } catch (uploadErr) {
-                    console.warn(`Failed to upload audio for clip ${clip.id}:`, uploadErr);
+                    console.error(`Failed to upload audio for clip ${clip.id}:`, uploadErr);
                   }
                 }
               }
