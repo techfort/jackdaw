@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { getSharedAudioContext } from './lib/sharedAudioContext';
 import { startCapture, RecordingSession } from './lib/recordingEngine';
 import audioBufferToWav from 'audiobuffer-to-wav';
-import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind, Reply } from './types';
+import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind, Reply, TempoEvent } from './types';
 import { serializeClip } from './lib/clipAudioUtils';
 import { ConcurrentUpdateError } from './services/storage/types';
 import { storageService, authService } from './services/storage';
@@ -80,6 +80,9 @@ export const useStore = create<DAWState>((set, get) => {
     availableInputDevices: [],
     selectedInputDeviceId: null,
     isRecording: false,
+    isMonitoring: false,
+    tempoEvents: [],
+    showTempoSheet: false,
     currentUser: null,
     activityEvents: [],
     seenCommentIds: [],
@@ -119,6 +122,28 @@ export const useStore = create<DAWState>((set, get) => {
     setOnline: (online) => set({ isOnline: online }),
     setAvailableInputDevices: (devices) => set({ availableInputDevices: devices }),
     setSelectedInputDeviceId: (deviceId) => set({ selectedInputDeviceId: deviceId }),
+    toggleMonitoring: () => set((state) => ({ isMonitoring: !state.isMonitoring })),
+
+    addTempoEvent: (event) => {
+      const id = generateId();
+      const full: TempoEvent = { id, ...event };
+      set((state) => ({ tempoEvents: [...state.tempoEvents, full].sort((a, b) => a.time - b.time) }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+    updateTempoEvent: (id, updates) => {
+      set((state) => ({
+        tempoEvents: state.tempoEvents
+          .map(e => e.id === id ? { ...e, ...updates } : e)
+          .sort((a, b) => a.time - b.time),
+      }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+    removeTempoEvent: (id) => {
+      set((state) => ({ tempoEvents: state.tempoEvents.filter(e => e.id !== id) }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+    setShowTempoSheet: (show) => set({ showTempoSheet: show }),
+
     setSelectedTrackId: (id) => set({ selectedTrackId: id }),
 
     armTrack: (trackId, armed) => {
@@ -269,6 +294,7 @@ export const useStore = create<DAWState>((set, get) => {
           set({
             lastRemoteUpdate: data.updatedAt,
             tempo: data.tempo,
+            tempoEvents: data.tempoEvents || [],
             comments: data.comments || [],
             // Merge remote metadata while preserving per-clip buffers from local state
             tracks: get().tracks.map(localTrack => {
@@ -308,7 +334,7 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     pushUpdate: async () => {
-      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo, lastRemoteUpdate, isOnline } = get();
+      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo, tempoEvents, lastRemoteUpdate, isOnline } = get();
       if (!isSyncing || !currentProjectId || !currentSongId) return;
 
       if (!isOnline) {
@@ -323,6 +349,7 @@ export const useStore = create<DAWState>((set, get) => {
       try {
         await (storageService as any).saveSong(currentProjectId, currentSongId, {
           tempo,
+          tempoEvents,
           comments,
           // Strip non-serialisable AudioBuffer from each clip before persisting.
           // audioData (raw bytes) is kept so FirebaseStorage can upload it.

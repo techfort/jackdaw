@@ -1,5 +1,6 @@
 import React, { useMemo, useCallback, useState, useRef } from 'react';
 import { useStore, useProjectDuration } from '../store';
+import { getTempoSegments, snapToNearestBeat } from '../lib/tempoUtils';
 
 const MARKER_COLORS: Record<1 | 2, string> = {
   1: '#10B981', // emerald
@@ -79,23 +80,20 @@ const MarkerFlag: React.FC<MarkerFlagProps> = ({ index, time, label, zoom, onLab
 };
 
 export const TimelineRuler: React.FC = () => {
-  const { timelineMode, tempo, zoom, currentTime, setCurrentTime, snapEnabled, markers, markerLabels, setMarkerLabel } = useStore();
+  const { timelineMode, tempo, tempoEvents, zoom, currentTime, setCurrentTime, snapEnabled, markers, markerLabels, setMarkerLabel } = useStore();
   const projectDuration = useProjectDuration();
+
+  const snapTime = useCallback((raw: number) => {
+    if (!snapEnabled || timelineMode !== 'beats') return raw;
+    return snapToNearestBeat(raw, tempoEvents, tempo);
+  }, [snapEnabled, timelineMode, tempo, tempoEvents]);
 
   const handleInteraction = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
-
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    let time = x / zoom;
-
-    if (snapEnabled && timelineMode === 'beats') {
-      const beatDuration = 60 / tempo;
-      time = Math.round(time / beatDuration) * beatDuration;
-    }
-
-    setCurrentTime(time);
-  }, [zoom, snapEnabled, timelineMode, tempo, setCurrentTime]);
+    setCurrentTime(snapTime(x / zoom));
+  }, [zoom, snapTime, setCurrentTime]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     handleInteraction(e);
@@ -103,12 +101,7 @@ export const TimelineRuler: React.FC = () => {
     const onMouseMove = (moveEvent: MouseEvent) => {
       const rect = e.currentTarget.getBoundingClientRect();
       const x = moveEvent.clientX - rect.left;
-      let time = x / zoom;
-      if (snapEnabled && timelineMode === 'beats') {
-        const beatDuration = 60 / tempo;
-        time = Math.round(time / beatDuration) * beatDuration;
-      }
-      setCurrentTime(time);
+      setCurrentTime(snapTime(x / zoom));
     };
 
     const onMouseUp = () => {
@@ -156,9 +149,7 @@ export const TimelineRuler: React.FC = () => {
       }
     } else {
       const safeTempo = Number(tempo) || 120;
-      const secondsPerBeat = 60 / safeTempo;
-      const beatsPerBar = 4;
-      const totalBeats = maxSeconds / secondsPerBeat;
+      const segments = getTempoSegments(tempoEvents, safeTempo, maxSeconds);
 
       let barStep = 1;
       if (pixelsPerSecond < 10) barStep = 8;
@@ -166,24 +157,37 @@ export const TimelineRuler: React.FC = () => {
       else if (pixelsPerSecond < 50) barStep = 2;
       else barStep = 1;
 
-      for (let i = 0; i < totalBeats; i++) {
-        const isBar = i % beatsPerBar === 0;
-        const isMajor = i % (beatsPerBar * barStep) === 0;
+      let globalBeatIndex = 0;
 
-        if (isMajor || (isBar && pixelsPerSecond > 20)) {
-          const position = i * secondsPerBeat * pixelsPerSecond;
-          if (isNaN(position)) continue;
+      for (const seg of segments) {
+        const beatsPerBar = seg.numerator;
+        const beatDuration = 60 / seg.bpm;
+        let t = seg.startTime;
 
-          list.push({
-            label: isMajor ? `${Math.floor(i / beatsPerBar) + 1}.1` : null,
-            position,
-            type: isMajor ? 'major' : 'minor'
-          });
+        while (t < seg.endTime && t < maxSeconds) {
+          const beatInBar = globalBeatIndex % beatsPerBar;
+          const isBar = beatInBar === 0;
+          const barNumber = Math.floor(globalBeatIndex / beatsPerBar);
+          const isMajor = barNumber % barStep === 0 && isBar;
+
+          if (isMajor || (isBar && pixelsPerSecond > 20)) {
+            const position = t * pixelsPerSecond;
+            if (!isNaN(position)) {
+              list.push({
+                label: isMajor ? `${barNumber + 1}.1` : null,
+                position,
+                type: isMajor ? 'major' : 'minor'
+              });
+            }
+          }
+
+          t += beatDuration;
+          globalBeatIndex++;
         }
       }
     }
     return list;
-  }, [timelineMode, tempo, zoom, projectDuration]);
+  }, [timelineMode, tempo, tempoEvents, zoom, projectDuration]);
 
   return (
     <div

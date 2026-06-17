@@ -18,6 +18,7 @@ import {
 import { useStore } from '../store';
 import { TrackData } from '../types';
 import { WaveformRenderer } from './WaveformRenderer';
+import { InputLevelMeter } from './InputLevelMeter';
 import { format } from 'date-fns';
 import {
   muteTrackByReference,
@@ -281,6 +282,12 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             >
               <ChevronRight size={12} />
             </button>
+          </div>
+        )}
+
+        {track.isArmed && (
+          <div className="px-0.5 py-0.5">
+            <InputLevelMeter />
           </div>
         )}
 
