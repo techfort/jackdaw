@@ -48,14 +48,14 @@ export interface Clip {
   duration: number; // Playback duration in seconds
   audioStart: number; // Start point within the buffer in seconds
   isMuted: boolean;
+  buffer?: AudioBuffer | null;   // Decoded audio — not persisted, stripped before save
+  audioData?: ArrayBuffer;       // Raw bytes — kept for storage layer upload/cache
+  storagePath?: string;          // Firebase Storage URL for this clip's audio
 }
 
 export interface TrackData {
   id: string;
   name: string;
-  buffer?: AudioBuffer | null;
-  audioData?: ArrayBuffer; // Stored raw data for persistence
-  storagePath?: string;    // Firebase Storage path: audio/{projectId}/{trackId}
   volume: number; // 0 to 1
   isMuted: boolean;
   isSoloed: boolean;
@@ -68,6 +68,14 @@ export interface TrackData {
 }
 
 export type TimelineMode = 'time' | 'beats';
+
+export interface TempoEvent {
+  id: string;
+  time: number;       // wall-clock seconds where this tempo takes effect
+  bpm: number;
+  numerator?: number;   // time signature numerator, default 4
+  denominator?: number; // time signature denominator, default 4
+}
 
 import { Role } from './services/storage/types';
 export type { Role };
@@ -115,6 +123,9 @@ export interface DAWState {
   availableInputDevices: MediaDeviceInfo[];
   selectedInputDeviceId: string | null;
   isRecording: boolean;
+  isMonitoring: boolean;
+  tempoEvents: TempoEvent[];
+  showTempoSheet: boolean;
 
   // Actions
   setSpectrumOpen: (open: boolean) => void;
@@ -122,6 +133,11 @@ export interface DAWState {
   setOnline: (online: boolean) => void;
   setAvailableInputDevices: (devices: MediaDeviceInfo[]) => void;
   setSelectedInputDeviceId: (deviceId: string | null) => void;
+  toggleMonitoring: () => void;
+  addTempoEvent: (event: Omit<TempoEvent, 'id'>) => void;
+  updateTempoEvent: (id: string, updates: Partial<Omit<TempoEvent, 'id'>>) => void;
+  removeTempoEvent: (id: string) => void;
+  setShowTempoSheet: (show: boolean) => void;
   armTrack: (trackId: string, armed: boolean) => void;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;

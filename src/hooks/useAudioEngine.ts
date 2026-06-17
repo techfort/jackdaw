@@ -40,16 +40,16 @@ export const useAudioEngine = () => {
     const now = ctx.currentTime;
 
     tracks.forEach(track => {
-      if (!track.buffer || track.isMuted) return;
+      if (track.isMuted) return;
 
       const isSoloedSomewhere = tracks.some(t => t.isSoloed);
       const shouldBeHearable = !isSoloedSomewhere || track.isSoloed;
 
       (track.clips || []).forEach(clip => {
-        if (clip.isMuted || !shouldBeHearable) return;
+        if (clip.isMuted || !shouldBeHearable || !clip.buffer) return;
 
         const source = ctx.createBufferSource();
-        source.buffer = track.buffer!;
+        source.buffer = clip.buffer;
 
         const gain = ctx.createGain();
         gain.gain.value = track.volume;

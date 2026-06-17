@@ -101,6 +101,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const canRedo = useStore(state => state.canRedo);
   const showMixer = useStore(state => state.showMixer);
   const setShowMixer = useStore(state => state.setShowMixer);
+  const showTempoSheet = useStore(state => state.showTempoSheet);
+  const setShowTempoSheet = useStore(state => state.setShowTempoSheet);
   const isClickEnabled = useStore(state => state.isClickEnabled);
   const setClickEnabled = useStore(state => state.setClickEnabled);
   const markers = useStore(state => state.markers);
@@ -158,9 +160,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
         name: currentSongName,
         tempo,
         comments,
-        tracks: tracks.map(({ buffer, audioData, ...rest }) => ({
+        tracks: tracks.map(({ ...rest }) => ({
           ...rest,
-          clips: (rest.clips || []).map(c => ({ ...c }))
+          clips: (rest.clips || []).map(({ buffer: _buf, ...c }) => c)
         })) as any,
         updatedAt: Date.now(),
         projectId
@@ -446,6 +448,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
           {divider}
           <button onClick={() => setShowMixer(!showMixer)} aria-label="Toggle mixer" aria-pressed={showMixer} className={textBtn(showMixer)}>
             <LayoutDashboard size={13} /> Mixer
+          </button>
+          <button onClick={() => setShowTempoSheet(!showTempoSheet)} aria-label="Toggle tempo sheet" aria-pressed={showTempoSheet} className={textBtn(showTempoSheet)} title="Tempo Sheet — variable tempo">
+            <Timer size={13} /> Tempo
           </button>
           <div className="relative">
             <button onClick={onToggleCollaboration} aria-label="Toggle collaboration hub" aria-pressed={isCollaborationOpen} className={textBtn(isCollaborationOpen, 'bg-zinc-600 text-white shadow-lg')}>

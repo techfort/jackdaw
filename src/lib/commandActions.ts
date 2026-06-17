@@ -92,11 +92,11 @@ const getAutoCommentTarget = (tracks: TrackData[], currentTime: number): TrackDa
   const hasSolo = tracks.some(track => track.isSoloed);
 
   const playable = tracks.filter(track => {
-    if (!track.buffer || track.isMuted) return false;
+    if (track.isMuted) return false;
     if (hasSolo && !track.isSoloed) return false;
 
     return (track.clips || []).some(clip => {
-      if (clip.isMuted) return false;
+      if (clip.isMuted || !clip.buffer) return false;
       return currentTime < getClipEnd(clip);
     });
   });
@@ -526,7 +526,7 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
     if (!track) {
       return { ok: false, message: `No track found matching "${match[1]}".` };
     }
-    if (!track.buffer) {
+    if (!track.clips.some(c => c.buffer)) {
       return { ok: false, message: `Track "${track.name}" has no audio data to export.` };
     }
     await exportStem(track);

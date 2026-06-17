@@ -3,7 +3,8 @@ import React, { useMemo } from 'react';
 import { getSharedAudioContext } from './lib/sharedAudioContext';
 import { startCapture, RecordingSession } from './lib/recordingEngine';
 import audioBufferToWav from 'audiobuffer-to-wav';
-import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind, Reply } from './types';
+import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind, Reply, TempoEvent } from './types';
+import { serializeClip } from './lib/clipAudioUtils';
 import { ConcurrentUpdateError } from './services/storage/types';
 import { storageService, authService } from './services/storage';
 import { parseMentions, parseTags } from './lib/mentionUtils';
@@ -79,6 +80,9 @@ export const useStore = create<DAWState>((set, get) => {
     availableInputDevices: [],
     selectedInputDeviceId: null,
     isRecording: false,
+    isMonitoring: false,
+    tempoEvents: [],
+    showTempoSheet: false,
     currentUser: null,
     activityEvents: [],
     seenCommentIds: [],
@@ -118,6 +122,28 @@ export const useStore = create<DAWState>((set, get) => {
     setOnline: (online) => set({ isOnline: online }),
     setAvailableInputDevices: (devices) => set({ availableInputDevices: devices }),
     setSelectedInputDeviceId: (deviceId) => set({ selectedInputDeviceId: deviceId }),
+    toggleMonitoring: () => set((state) => ({ isMonitoring: !state.isMonitoring })),
+
+    addTempoEvent: (event) => {
+      const id = generateId();
+      const full: TempoEvent = { id, ...event };
+      set((state) => ({ tempoEvents: [...state.tempoEvents, full].sort((a, b) => a.time - b.time) }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+    updateTempoEvent: (id, updates) => {
+      set((state) => ({
+        tempoEvents: state.tempoEvents
+          .map(e => e.id === id ? { ...e, ...updates } : e)
+          .sort((a, b) => a.time - b.time),
+      }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+    removeTempoEvent: (id) => {
+      set((state) => ({ tempoEvents: state.tempoEvents.filter(e => e.id !== id) }));
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+    setShowTempoSheet: (show) => set({ showTempoSheet: show }),
+
     setSelectedTrackId: (id) => set({ selectedTrackId: id }),
 
     armTrack: (trackId, armed) => {
@@ -144,9 +170,12 @@ export const useStore = create<DAWState>((set, get) => {
       if (!_recordSession) return;
       const session = _recordSession;
       _recordSession = null;
-      set({ isRecording: false });
+      // Set isRecording false AFTER the stream fully closes so the input monitor
+      // doesn't race to open a new getUserMedia while the recording stream is still
+      // holding the device (which can cause two concurrent streams on one device).
       try {
         const buffer = await session.stop();
+        set({ isRecording: false });
         if (buffer.duration < 0.05) return;
         const wav: ArrayBuffer = audioBufferToWav(buffer);
         const armedTracks = get().tracks.filter(t => t.isArmed);
@@ -154,6 +183,7 @@ export const useStore = create<DAWState>((set, get) => {
           get().addRecordedClip(track.id, buffer, wav, _recordStartTime);
         }
       } catch (err) {
+        set({ isRecording: false });
         console.error('Failed to stop recording:', err);
       }
     },
@@ -165,8 +195,6 @@ export const useStore = create<DAWState>((set, get) => {
           if (t.id !== trackId) return t;
           return {
             ...t,
-            buffer,
-            audioData,
             clips: [
               ...(t.clips || []),
               {
@@ -175,6 +203,8 @@ export const useStore = create<DAWState>((set, get) => {
                 duration: buffer.duration,
                 audioStart: 0,
                 isMuted: false,
+                buffer,
+                audioData,
               },
             ],
           };
@@ -268,14 +298,20 @@ export const useStore = create<DAWState>((set, get) => {
           set({
             lastRemoteUpdate: data.updatedAt,
             tempo: data.tempo,
+            tempoEvents: data.tempoEvents || [],
             comments: data.comments || [],
-            // Only update track metadata, keep buffers
+            // Merge remote metadata while preserving per-clip buffers from local state
             tracks: get().tracks.map(localTrack => {
               const remoteTrack = data.tracks.find((t: any) => t.id === localTrack.id);
-              if (remoteTrack) {
-                return { ...localTrack, ...remoteTrack };
-              }
-              return localTrack;
+              if (!remoteTrack) return localTrack;
+              const localClipsById = new Map((localTrack.clips || []).map(c => [c.id, c]));
+              const mergedClips = (remoteTrack.clips || []).map((remoteClip: any) => {
+                const localClip = localClipsById.get(remoteClip.id);
+                return localClip
+                  ? { ...remoteClip, buffer: localClip.buffer, audioData: localClip.audioData }
+                  : remoteClip;
+              });
+              return { ...localTrack, ...remoteTrack, clips: mergedClips };
             })
           });
         }
@@ -302,7 +338,7 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     pushUpdate: async () => {
-      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo, lastRemoteUpdate, isOnline } = get();
+      const { isSyncing, currentProjectId, currentSongId, tracks, comments, tempo, tempoEvents, lastRemoteUpdate, isOnline } = get();
       if (!isSyncing || !currentProjectId || !currentSongId) return;
 
       if (!isOnline) {
@@ -317,10 +353,14 @@ export const useStore = create<DAWState>((set, get) => {
       try {
         await (storageService as any).saveSong(currentProjectId, currentSongId, {
           tempo,
+          tempoEvents,
           comments,
-          // Pass audioData so FirebaseStorage can upload it; saveSong strips it before Firestore write.
-          // LocalStorage handles audioData separately via its own IDB store.
-          tracks: tracks.map(({ buffer, ...rest }) => rest),
+          // Strip non-serialisable AudioBuffer from each clip before persisting.
+          // audioData (raw bytes) is kept so FirebaseStorage can upload it.
+          tracks: tracks.map((track) => ({
+            ...track,
+            clips: (track.clips || []).map(serializeClip),
+          })),
           updatedAt: now,
           baseUpdatedAt
         });
@@ -350,14 +390,14 @@ export const useStore = create<DAWState>((set, get) => {
           offset: currentTime,
           duration: audioBuffer.duration,
           audioStart: 0,
-          isMuted: false
+          isMuted: false,
+          buffer: audioBuffer,
+          audioData: arrayBuffer,
         };
 
         const newTrack: TrackData = {
           id: trackId,
           name: `Punch: ${file.name.split('.')[0]}`,
-          buffer: audioBuffer,
-          audioData: arrayBuffer,
           volume: 1,
           isMuted: false,
           isSoloed: false,
@@ -397,8 +437,6 @@ export const useStore = create<DAWState>((set, get) => {
         tracks: [...state.tracks, {
           id: generateId(),
           name,
-          buffer,
-          audioData,
           volume: 0.8,
           isMuted: false,
           isSoloed: false,
@@ -407,10 +445,12 @@ export const useStore = create<DAWState>((set, get) => {
           createdAt: Date.now(),
           clips: [{
             id: generateId(),
-            offset: offset,
+            offset,
             duration: buffer.duration,
             audioStart: 0,
             isMuted: false,
+            buffer,
+            audioData,
           }],
         }],
         canUndo: true
@@ -435,13 +475,7 @@ export const useStore = create<DAWState>((set, get) => {
           isFrozen: false,
           ownerId,
           createdAt: Date.now(),
-          clips: [{
-            id: generateId(),
-            offset: 0,
-            duration: 4,
-            audioStart: 0,
-            isMuted: false,
-          }],
+          clips: [],
         }],
         canUndo: true
       }));

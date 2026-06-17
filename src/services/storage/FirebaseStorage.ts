@@ -61,27 +61,50 @@ export class FirebaseStorageService implements StorageService {
       if (!snap.exists()) return null;
       const song = snap.data() as SongData;
 
-      // Restore audio for each track: check IDB cache first, then fetch from storagePath
+      // Restore per-clip audio: IDB cache (by clipId) → Firebase Storage URL.
+      // Falls back to track-level cache/storagePath for legacy songs.
       const { LocalStorageService } = await import('./LocalStorage');
       const localCache = new LocalStorageService();
 
+      const fetchAudio = async (url: string): Promise<ArrayBuffer | null> => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.arrayBuffer();
+        } catch (e) {
+          console.warn(`Failed to fetch audio from ${url}:`, e);
+          return null;
+        }
+      };
+
       const tracksWithAudio = await Promise.all(
         (song.tracks || []).map(async (track: any) => {
-          if (track.audioData) return track;
-          const cached = await localCache.getCachedAudio(track.id);
-          if (cached) return { ...track, audioData: cached };
-          if (track.storagePath) {
-            try {
-              const response = await fetch(track.storagePath);
-              if (!response.ok) throw new Error(`HTTP ${response.status}`);
-              const audioData = await response.arrayBuffer();
-              await localCache.cacheAudio(track.id, audioData);
-              return { ...track, audioData };
-            } catch (fetchErr) {
-              console.warn(`Failed to fetch audio for track ${track.id}:`, fetchErr);
-            }
-          }
-          return track;
+          // Legacy: if track still carries audioData directly, leave it for loadSong migration
+          const legacyAudio: ArrayBuffer | null =
+            track.audioData ??
+            (await localCache.getCachedAudio(track.id)) ??
+            (track.storagePath ? await fetchAudio(track.storagePath) : null);
+
+          const clipsWithAudio = await Promise.all(
+            (track.clips || []).map(async (clip: any) => {
+              if (clip.audioData) return clip;
+              const cached = await localCache.getCachedAudio(clip.id);
+              if (cached) return { ...clip, audioData: cached };
+              if (clip.storagePath) {
+                const audioData = await fetchAudio(clip.storagePath);
+                if (audioData) {
+                  await localCache.cacheAudio(clip.id, audioData);
+                  return { ...clip, audioData };
+                }
+              }
+              // Fall back to legacy track-level audio for old songs
+              if (legacyAudio) return { ...clip, audioData: legacyAudio };
+              return clip;
+            })
+          );
+
+          const { audioData: _legacyAudioData, storagePath: _legacyPath, ...trackRest } = track;
+          return { ...trackRest, clips: clipsWithAudio };
         })
       );
 
@@ -100,32 +123,39 @@ export class FirebaseStorageService implements StorageService {
       });
       const tracks = (data.tracks || []) as any[];
 
-      // Upload audio for any track that has audioData but no storagePath yet.
-      // Always cache locally as a fallback regardless of whether upload succeeds.
+      // Upload per-clip audio and cache locally.
       const { LocalStorageService } = await import('./LocalStorage');
       const localCache = new LocalStorageService();
 
       const tracksWithPaths = await Promise.all(
-        tracks.map(async (track) => {
-          if (track.audioData) {
-            await localCache.cacheAudio(track.id, track.audioData).catch(() => {});
-            if (!track.storagePath) {
-              try {
-                const key = `projects/${projectId}/songs/${songId}/tracks/${track.id}.mp3`;
-                const url = await audioStorage.upload(key, track.audioData, 'audio/mpeg');
-                if (url) return { ...track, storagePath: url };
-              } catch (uploadErr) {
-                console.warn(`Failed to upload audio for track ${track.id}:`, uploadErr);
+        tracks.map(async (track: any) => {
+          const clipsWithPaths = await Promise.all(
+            (track.clips || []).map(async (clip: any) => {
+              if (clip.audioData) {
+                await localCache.cacheAudio(clip.id, clip.audioData).catch(() => {});
+                if (!clip.storagePath) {
+                  try {
+                    const key = `projects/${projectId}/songs/${songId}/clips/${clip.id}.wav`;
+                    const url = await audioStorage.upload(key, clip.audioData, 'audio/wav');
+                    if (url) return { ...clip, storagePath: url };
+                  } catch (uploadErr) {
+                    console.warn(`Failed to upload audio for clip ${clip.id}:`, uploadErr);
+                  }
+                }
               }
-            }
-          }
-          return track;
+              return clip;
+            })
+          );
+          return { ...track, clips: clipsWithPaths };
         })
       );
 
       // Strip non-serialisable fields before writing to Firestore
       const { baseUpdatedAt, ...dataWithoutBase } = data as any;
-      const firestoreTracks = tracksWithPaths.map(({ buffer, audioData, ...rest }: any) => rest);
+      const firestoreTracks = tracksWithPaths.map(({ ...track }: any) => ({
+        ...track,
+        clips: (track.clips || []).map(({ buffer: _buf, audioData: _ad, ...clip }: any) => clip),
+      }));
       const songRef = doc(db, 'projects', projectId, 'songs', songId);
       const payload = { ...dataWithoutBase, tracks: firestoreTracks, updatedAt: Date.now() };
       trackFirestoreWrite(`projects/${projectId}/songs/${songId}`);

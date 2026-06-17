@@ -18,6 +18,7 @@ import {
 import { useStore } from '../store';
 import { TrackData } from '../types';
 import { WaveformRenderer } from './WaveformRenderer';
+import { InputLevelMeter } from './InputLevelMeter';
 import { format } from 'date-fns';
 import {
   muteTrackByReference,
@@ -71,7 +72,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
 
   const handleExportStem = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isExporting || !track.buffer) return;
+    if (isExporting || !track.clips.some(c => c.buffer)) return;
     setIsExporting(true);
     try {
       const { exportStem } = await import('../lib/exportUtils');
@@ -184,7 +185,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                 <Layers size={14} />
               </button>
             )}
-            {track.buffer && (
+            {track.clips.some(c => c.buffer) && (
               <button
                 onClick={handleExportStem}
                 disabled={isExporting}
@@ -281,6 +282,12 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
             >
               <ChevronRight size={12} />
             </button>
+          </div>
+        )}
+
+        {track.isArmed && (
+          <div className="px-0.5 py-0.5">
+            <InputLevelMeter />
           </div>
         )}
 
@@ -409,9 +416,9 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                     const snappedEnd = Math.round(totalEnd / beatDuration) * beatDuration;
                     newDuration = snappedEnd - initialOffset;
                   }
-                  // Check if we exceed buffer length
-                  if (track.buffer && clip.audioStart + newDuration > track.buffer.duration) {
-                    newDuration = track.buffer.duration - clip.audioStart;
+                  // Clamp to the clip's own buffer length
+                  if (clip.buffer && clip.audioStart + newDuration > clip.buffer.duration) {
+                    newDuration = clip.buffer.duration - clip.audioStart;
                   }
                   updateClip(track.id, clip.id, { duration: Math.max(0.01, newDuration) }, true);
                 }
@@ -444,8 +451,8 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
                 width: '100%' 
               }}
             >
-              <WaveformRenderer 
-                buffer={track.buffer} 
+              <WaveformRenderer
+                buffer={clip.buffer ?? null}
                 startTime={clip.audioStart}
                 duration={clip.duration}
                 width={clip.duration * zoom} 

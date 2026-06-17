@@ -11,7 +11,9 @@ import { useFileImport } from './hooks/useFileImport';
 import { usePresenceSync } from './hooks/usePresenceSync';
 import { useOnlineSync } from './hooks/useOnlineSync';
 import { useInputDevices } from './hooks/useInputDevices';
+import { useInputMonitor } from './hooks/useInputMonitor';
 import { Toolbar } from './components/Toolbar';
+import { TempoSheet } from './components/TempoSheet';
 import { authService, storageMode } from './services/storage';
 import { TimelineRuler } from './components/TimelineRuler';
 import { TrackItem } from './components/TrackItem';
@@ -103,6 +105,7 @@ export default function App() {
   const markers = useStore(state => state.markers);
   const showMixer = useStore(state => state.showMixer);
   const setShowMixer = useStore(state => state.setShowMixer);
+  const showTempoSheet = useStore(state => state.showTempoSheet);
 
   const [showCollaboration, setShowCollaboration] = React.useState(false);
   const [inviteParams, setInviteParams] = React.useState<{ inviteId: string; projectId: string } | null>(null);
@@ -221,6 +224,7 @@ export default function App() {
   usePresenceSync();
   useOnlineSync();
   useInputDevices();
+  useInputMonitor();
 
   // Detect invite params in the URL early — persist to localStorage so onAuthStateChanged
   // can pick them up regardless of sign-in timing (handles already-signed-in users too)
@@ -375,7 +379,8 @@ export default function App() {
         isCollaborationOpen={showCollaboration}
         onSignIn={() => setShowSignInGate(true)}
       />
-      
+      {showTempoSheet && <TempoSheet />}
+
       <div className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 flex flex-col overflow-hidden relative">
           <div 
