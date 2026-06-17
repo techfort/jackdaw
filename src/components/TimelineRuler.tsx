@@ -97,9 +97,12 @@ export const TimelineRuler: React.FC = () => {
 
   const handleMouseDown = (e: React.MouseEvent) => {
     handleInteraction(e);
+    // Capture the element now — React nullifies e.currentTarget after the handler returns,
+    // so the mousemove closure would crash reading getBoundingClientRect on null.
+    const el = e.currentTarget as HTMLElement;
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      const rect = e.currentTarget.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
       const x = moveEvent.clientX - rect.left;
       setCurrentTime(snapTime(x / zoom));
     };
