@@ -1,25 +1,39 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(bd update *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git rm *)",
+      "Bash(git commit -m 'fix\\(freeze\\): allow mute/solo on frozen tracks for all collaborators *)",
+      "Bash(git stash *)",
+      "Bash(git pull *)",
+      "Bash(npx vitest *)",
+      "Bash(bd dolt *)",
+      "Bash(git restore *)"
+    ]
+  },
   "hooks": {
     "PreCompact": [
       {
+        "matcher": "",
         "hooks": [
           {
-            "command": "bd prime",
-            "type": "command"
+            "type": "command",
+            "command": "bd prime"
           }
-        ],
-        "matcher": ""
+        ]
       }
     ],
     "SessionStart": [
       {
+        "matcher": "",
         "hooks": [
           {
-            "command": "bd prime",
-            "type": "command"
+            "type": "command",
+            "command": "bd prime"
           }
-        ],
-        "matcher": ""
+        ]
       }
     ]
   }
