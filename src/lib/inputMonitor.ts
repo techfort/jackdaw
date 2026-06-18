@@ -16,11 +16,17 @@ const state: MonitorState = {
   deviceId: null,
 };
 
+// Incremented on every stopInputMonitor() call. startInputMonitor checks this
+// after its async getUserMedia() returns — if the generation changed while we
+// were awaiting, a stop was requested and we must not use the new stream.
+let generation = 0;
+
 export async function startInputMonitor(
   deviceId: string | null,
   monitoringEnabled: boolean
 ): Promise<void> {
   stopInputMonitor();
+  const myGeneration = generation;
 
   const constraints: MediaStreamConstraints = {
     audio: deviceId ? { deviceId: { exact: deviceId } } : true,
@@ -28,6 +34,13 @@ export async function startInputMonitor(
   };
 
   const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+  // If stopInputMonitor() was called while we were awaiting getUserMedia,
+  // immediately discard the stream so we don't create a concurrent stream.
+  if (generation !== myGeneration) {
+    stream.getTracks().forEach(t => t.stop());
+    return;
+  }
   const ctx = getSharedAudioContext();
   await ctx.resume();
 
@@ -57,6 +70,7 @@ export function setMonitorGain(enabled: boolean): void {
 }
 
 export function stopInputMonitor(): void {
+  generation++;
   state.source?.disconnect();
   state.gainNode?.disconnect();
   state.analyser?.disconnect();

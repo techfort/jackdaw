@@ -161,6 +161,11 @@ export const useStore = create<DAWState>((set, get) => {
       // startCapture opens getUserMedia, and having two concurrent streams
       // on the same device causes resource contention and silent/corrupt audio.
       stopInputMonitor();
+      // Brief pause so the OS can fully release the mic hardware before we
+      // open the recording stream. Without this, getUserMedia can succeed but
+      // deliver a silent stream if the previous monitor track hasn't been
+      // released by the driver yet.
+      await new Promise<void>(r => setTimeout(r, 80));
       _recordStartTime = get().currentTime;
       set({ isRecording: true });
       try {
