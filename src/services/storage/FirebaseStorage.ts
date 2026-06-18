@@ -136,8 +136,8 @@ export class FirebaseStorageService implements StorageService {
                 await localCache.cacheAudio(clip.id, clip.audioData).catch(() => {});
                 if (!clip.storagePath) {
                   try {
-                    const key = `projects/${projectId}/songs/${songId}/clips/${clip.id}.wav`;
-                    const url = await audioStorage.upload(key, clip.audioData, 'audio/wav');
+                    const key = `projects/${projectId}/songs/${songId}/clips/${clip.id}.mp3`;
+                    const url = await audioStorage.upload(key, clip.audioData, 'audio/mpeg');
                     if (url) return { ...clip, storagePath: url };
                     console.error(`Audio upload returned empty URL for clip ${clip.id} — storage may not be configured. Audio will only be available from local IDB cache.`);
                   } catch (uploadErr) {

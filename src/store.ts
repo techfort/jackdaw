@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { getSharedAudioContext } from './lib/sharedAudioContext';
 import { startCapture, RecordingSession } from './lib/recordingEngine';
 import { stopInputMonitor } from './lib/inputMonitor';
-import audioBufferToWav from 'audiobuffer-to-wav';
+import { audioBufferToMp3 } from './lib/audioBufferToMp3';
 import { DAWState, TrackData, TimelineMode, Comment, Clip, CommentStatus, ActivityEvent, ActivityEventKind, Reply, TempoEvent } from './types';
 import { serializeClip } from './lib/clipAudioUtils';
 import { ConcurrentUpdateError } from './services/storage/types';
@@ -188,10 +188,10 @@ export const useStore = create<DAWState>((set, get) => {
         const buffer = await session.stop();
         set({ isRecording: false });
         if (buffer.duration < 0.05) return;
-        const wav: ArrayBuffer = audioBufferToWav(buffer);
+        const mp3: ArrayBuffer = audioBufferToMp3(buffer);
         const armedTracks = get().tracks.filter(t => t.isArmed);
         for (const track of armedTracks) {
-          get().addRecordedClip(track.id, buffer, wav, _recordStartTime);
+          get().addRecordedClip(track.id, buffer, mp3, _recordStartTime);
         }
       } catch (err) {
         set({ isRecording: false });
