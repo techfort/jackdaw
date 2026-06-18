@@ -37,8 +37,14 @@ export class SupabaseAudioStorage implements IAudioStorage {
   private bucket: string;
 
   constructor(supabaseUrl: string, publishableKey: string, bucket = 'jackdaw-preview') {
-    // We only need Storage API access here. Disabling auth session persistence
-    // avoids multiple GoTrueClient instances and keeps requests on anon role.
+    // The 'jackdaw-preview' bucket is a public preview store. Requests use the
+    // anon role (the publishable key). Bucket access is granted to the `public`
+    // role via the storage RLS policy in supabase-storage-policy.sql — that
+    // policy is what must exist for uploads to succeed (otherwise: 403
+    // "new row violates row-level security policy"). We deliberately do NOT
+    // signInAnonymously() here: anonymous sign-in flips the role to
+    // `authenticated`, which would then require a different policy and break if
+    // the anon-auth provider is disabled.
     this.storage = createClient(supabaseUrl, publishableKey, {
       auth: {
         persistSession: false,
@@ -54,7 +60,12 @@ export class SupabaseAudioStorage implements IAudioStorage {
       .from(this.bucket)
       .upload(key, data, { contentType: mimeType, upsert: true });
     if (error && !/already exists/i.test(error.message)) {
-      console.error('Supabase upload error details:', JSON.stringify(error));
+      console.error(
+        `Supabase upload failed for "${this.bucket}/${key}". If this is a 403 ` +
+        `"row-level security policy" error, apply supabase-storage-policy.sql. ` +
+        `Details:`,
+        JSON.stringify(error)
+      );
       throw new Error(`Supabase upload failed: ${error.message}`);
     }
     const { data: urlData } = this.storage.from(this.bucket).getPublicUrl(key);
