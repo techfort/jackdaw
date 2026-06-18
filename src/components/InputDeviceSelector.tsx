@@ -29,7 +29,9 @@ export const InputDeviceSelector: React.FC = () => {
 
   const requestPermissionAndRefresh = async () => {
     try {
-      // Requesting mic access populates device labels
+      // Requesting mic access populates device labels (and, on Chrome, the real
+      // deviceIds). Without this, enumerateDevices() returns blank-labelled
+      // entries and you can't tell which microphone you're recording from.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach(t => t.stop());
       const all = await navigator.mediaDevices.enumerateDevices();
@@ -37,6 +39,16 @@ export const InputDeviceSelector: React.FC = () => {
     } catch {
       // User denied — leave list as-is
     }
+  };
+
+  // Labels are empty until mic permission is granted. Detect that so we can
+  // prompt for access when the user opens the picker.
+  const labelsMissing = availableInputDevices.some(d => !d.label);
+
+  const handleToggleOpen = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && labelsMissing) requestPermissionAndRefresh();
   };
 
   const displayLabel = (device: MediaDeviceInfo) =>
@@ -60,7 +72,7 @@ export const InputDeviceSelector: React.FC = () => {
     <div ref={containerRef} className="flex items-center gap-1">
       <div className="relative">
       <button
-        onClick={() => setOpen(v => !v)}
+        onClick={handleToggleOpen}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Audio input: ${selectedDevice ? displayLabel(selectedDevice) : 'None selected'}`}

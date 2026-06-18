@@ -1,111 +1,121 @@
 import { getSharedAudioContext } from './sharedAudioContext';
 
-const WORKLET_CODE = `
-class RecorderProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this._active = true;
-    this.port.onmessage = () => { this._active = false; };
-  }
-  process(inputs) {
-    if (!this._active) return false;
-    const input = inputs[0];
-    if (input && input.length > 0) {
-      const arrays = input.map(ch => {
-        const copy = new Float32Array(ch.length);
-        copy.set(ch);
-        return copy;
-      });
-      this.port.postMessage(arrays, arrays.map(a => a.buffer));
-    }
-    return this._active;
-  }
-}
-registerProcessor('jackdaw-recorder', RecorderProcessor);
-`;
-
-let workletContext: AudioContext | null = null;
-
-async function ensureWorkletLoaded(ctx: AudioContext): Promise<void> {
-  if (workletContext === ctx) return;
-  const blob = new Blob([WORKLET_CODE], { type: 'application/javascript' });
-  const url = URL.createObjectURL(blob);
-  try {
-    await ctx.audioWorklet.addModule(url);
-    workletContext = ctx;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 export interface RecordingSession {
   stream: MediaStream;
   stop(): Promise<AudioBuffer>;
 }
 
+/**
+ * Pick a MediaRecorder mimeType the current browser actually supports.
+ * Chrome/Firefox → webm/opus, Safari → mp4/aac. Returns undefined to let the
+ * browser choose its default if none of the preferred types are supported.
+ */
+function pickMimeType(): string | undefined {
+  if (typeof MediaRecorder === 'undefined') return undefined;
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ];
+  return candidates.find(t => MediaRecorder.isTypeSupported(t));
+}
+
+/** Peak absolute sample value across all channels — used to detect silent captures. */
+function peakAmplitude(buffer: AudioBuffer): number {
+  let peak = 0;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < data.length; i++) {
+      const a = Math.abs(data[i]);
+      if (a > peak) peak = a;
+    }
+  }
+  return peak;
+}
+
 export async function startCapture(deviceId: string | null): Promise<RecordingSession> {
-  const constraints: MediaStreamConstraints = {
-    audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+  const audioConstraints: MediaTrackConstraints = {
+    // Disable all browser DSP — noise suppression, AGC and echo cancellation
+    // operate in processing blocks and introduce periodic burst artifacts that
+    // corrupt recordings in a DAW context.
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+  };
+  if (deviceId) audioConstraints.deviceId = { exact: deviceId };
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: audioConstraints,
     video: false,
+  });
+
+  // Log exactly which microphone the browser handed us — invaluable when there
+  // are multiple inputs and a recording comes back silent.
+  const track = stream.getAudioTracks()[0];
+  console.log(`[recording] capturing from: "${track?.label || 'unknown device'}"`, track?.getSettings?.());
+
+  // MediaRecorder is the standard, reliable capture path. The previous
+  // AudioWorklet + silent-gain approach captured silence on some setups
+  // (zero-channel input quanta / mic-device contention), which surfaced as
+  // empty stems. MediaRecorder records the live track to an encoded blob with
+  // no graph plumbing required.
+  const mimeType = pickMimeType();
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = (e: BlobEvent) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
   };
 
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-  const ctx = getSharedAudioContext();
-  await ctx.resume();
-  await ensureWorkletLoaded(ctx);
-
-  const source = ctx.createMediaStreamSource(stream);
-  const workletNode = new AudioWorkletNode(ctx, 'jackdaw-recorder');
-
-  // A silent gain (value=0) connected to destination is required to keep the
-  // worklet in the "actively processing" audio graph — without it, some browsers
-  // skip calling process() entirely.
-  const silentGain = ctx.createGain();
-  silentGain.gain.value = 0;
-
-  const chunks: Float32Array[][] = [];
-  workletNode.port.onmessage = (e: MessageEvent) => {
-    chunks.push(e.data as Float32Array[]);
-  };
-
-  source.connect(workletNode);
-  workletNode.connect(silentGain);
-  silentGain.connect(ctx.destination);
+  // timeslice so dataavailable fires periodically — guarantees we still get
+  // data even if the final flush on stop() is delayed.
+  recorder.start(250);
 
   return {
     stream,
-    stop: async (): Promise<AudioBuffer> => {
-      workletNode.port.postMessage('stop');
+    stop: (): Promise<AudioBuffer> => {
+      const ctx = getSharedAudioContext();
 
-      // Wait for in-flight frames to flush from the audio thread's message queue.
-      // 200ms covers 44100Hz / 128 samples ≈ 345 blocks/s → ~69 blocks of headroom.
-      await new Promise<void>(resolve => setTimeout(resolve, 200));
+      return new Promise<AudioBuffer>((resolve, reject) => {
+        recorder.onerror = (e) => {
+          stream.getTracks().forEach(t => t.stop());
+          reject((e as unknown as { error?: Error }).error ?? new Error('MediaRecorder error'));
+        };
 
-      source.disconnect();
-      workletNode.disconnect();
-      silentGain.disconnect();
-      stream.getTracks().forEach(t => t.stop());
+        recorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          try {
+            const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
+            if (blob.size === 0) {
+              console.warn('[recording] captured 0 bytes — no audio was recorded.');
+              resolve(ctx.createBuffer(1, 1, ctx.sampleRate));
+              return;
+            }
 
-      const channelCount = chunks[0]?.length ?? 1;
-      const totalSamples = chunks.reduce((sum, frame) => sum + (frame[0]?.length ?? 0), 0);
+            const arrayBuffer = await blob.arrayBuffer();
+            await ctx.resume();
+            const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
 
-      if (totalSamples === 0) {
-        return ctx.createBuffer(1, 1, ctx.sampleRate);
-      }
+            const peak = peakAmplitude(audioBuffer);
+            console.log(
+              `[recording] captured ${blob.size} bytes, ${audioBuffer.duration.toFixed(2)}s, peak ${peak.toFixed(4)}`
+            );
+            if (peak < 1e-4) {
+              console.warn(
+                '[recording] captured audio is silent (peak ≈ 0). Check that the correct ' +
+                'input device is selected and not muted at the OS level.'
+              );
+            }
 
-      const buffer = ctx.createBuffer(channelCount, totalSamples, ctx.sampleRate);
-      for (let ch = 0; ch < channelCount; ch++) {
-        const channelData = buffer.getChannelData(ch);
-        let offset = 0;
-        for (const frame of chunks) {
-          const src = frame[ch] ?? new Float32Array(frame[0]?.length ?? 0);
-          channelData.set(src, offset);
-          offset += src.length;
-        }
-      }
+            resolve(audioBuffer);
+          } catch (err) {
+            reject(err);
+          }
+        };
 
-      return buffer;
+        recorder.stop();
+      });
     },
   };
 }
