@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@google/genai": "^1.29.0",
     "@supabase/storage-js": "^2.106.1",
     "@supabase/supabase-js": "^2.106.1",
@@ -24,7 +25,6 @@
     "express": "^4.21.2",
     "firebase": "^12.13.0",
     "idb": "^8.0.3",
-    "lamejs": "^1.2.1",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",

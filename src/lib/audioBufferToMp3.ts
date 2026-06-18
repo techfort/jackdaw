@@ -1,5 +1,4 @@
-// @ts-ignore lamejs has no bundled type declarations
-import Lame from 'lamejs';
+import { Mp3Encoder } from '@breezystack/lamejs';
 
 function floatToInt16(float32: Float32Array): Int16Array {
   const int16 = new Int16Array(float32.length);
@@ -13,13 +12,13 @@ function floatToInt16(float32: Float32Array): Int16Array {
 export function audioBufferToMp3(audioBuffer: AudioBuffer, bitrate = 128): ArrayBuffer {
   const channels = audioBuffer.numberOfChannels;
   const sampleRate = audioBuffer.sampleRate;
-  const encoder = new Lame.Mp3Encoder(channels, sampleRate, bitrate);
+  const encoder = new Mp3Encoder(channels, sampleRate, bitrate);
 
   const blockSize = 1152;
   const left = floatToInt16(audioBuffer.getChannelData(0));
   const right = channels > 1 ? floatToInt16(audioBuffer.getChannelData(1)) : left;
 
-  const chunks: Int8Array[] = [];
+  const chunks: Uint8Array[] = [];
   for (let i = 0; i < left.length; i += blockSize) {
     const mp3buf = encoder.encodeBuffer(
       left.subarray(i, i + blockSize),
