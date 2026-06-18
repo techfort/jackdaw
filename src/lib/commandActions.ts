@@ -27,37 +27,50 @@ export type CommandResult = {
 };
 
 const COMMAND_HELP: Record<string, string> = {
-  'add track': 'add track [name] — create a new empty track',
+  // Playback
+  'play':     'play — start playback from current position',
+  'pause':    'pause — pause playback',
+  'stop':     'stop — stop and return playhead to 0',
+  // Navigation
+  'go':       'go <time> — seek to position (seconds, mm:ss, bar.beat)',
+  'ff':       'ff [n] — fast-forward by n seconds (default 5)',
+  'rw':       'rw [n] — rewind by n seconds (default 5)',
+  // Tracks
+  'add track':'add track [name] — create a new empty track',
   'rm track': 'rm track [id|name] — remove the selected or named track',
-  'rm c': 'rm c <id> — remove comment by id',
-  'sel': 'sel <id|name> — select a track by id or name',
-  'go': 'go <time> — seek to time in seconds (e.g. go 32.5)',
-  'ff': 'ff [n] — fast-forward by n seconds (default 5)',
-  'rw': 'rw [n] — rewind by n seconds (default 5)',
-  's': 's [id|name] — solo track (toggle)',
-  'm': 'm [id|name] — mute track (toggle)',
-  'vu': 'vu [id|name] — raise volume by 10%',
-  'volup': 'volup [id|name] — raise volume by 10%',
-  'vd': 'vd [id|name] — lower volume by 10%',
-  'voldown': 'voldown [id|name] — lower volume by 10%',
-  'c:': 'c: <text> — add a comment at the current playhead position',
-  'reply': 'reply <id> "text" — add a threaded reply to comment #id',
-  'freeze': 'freeze <id|name> — freeze track (owner only)',
+  'sel':      'sel <id|name> — select a track by id or name',
+  'arm':      'arm <id|name> — toggle record-arm on a track',
+  'm':        'm [id|name] — toggle mute on track',
+  's':        's [id|name] — toggle solo on track',
+  'vu':       'vu [ref] [n] — raise track volume (default 0.1)',
+  'vd':       'vd [ref] [n] — lower track volume (default 0.1)',
+  'freeze':   'freeze <id|name> — freeze track (owner only)',
   'unfreeze': 'unfreeze <id|name> — unfreeze track (owner only)',
-  'invite': 'invite <email> [role] — invite a collaborator (role: editor|viewer)',
-  'e': 'e — export full mixdown as WAV',
-  'e stem': 'e stem <id|name> — export a single track stem as WAV',
-  'punchin': 'punchin — open file picker to punch in audio at playhead',
+  // Session
+  'tempo':    'tempo <bpm> — set tempo (20–300)',
+  'marker':   'marker <1|2> [time] — set (or clear with no time) a marker',
+  'undo':     'undo — undo last action',
+  'redo':     'redo — redo last undone action',
+  // Comments
+  'c:':       'c: "text" — add comment at playhead on selected/auto track',
+  'c <ref>:': 'c <ref>: "text" — add comment on a specific track',
+  'rm c':     'rm c <id> — remove comment by id',
+  'reply':    'reply <id> "text" — add a threaded reply to comment #id',
+  'unread':   'unread — list unread open comments',
+  // Collaboration
+  'invite':   'invite <email> [role] — invite collaborator (role: editor|viewer)',
+  // Export
+  'e':        'e — export full mixdown as WAV',
+  'e stem':   'e stem [id|name] — export a single track stem; no arg = between markers',
+  'punchin':  'punchin — open file picker to punch in audio at playhead',
+  // View / tools
   'spectrum': 'spectrum — toggle spectrum analyser panel',
-  'click': 'click — toggle metronome/click track',
-  'metronome': 'metronome — toggle metronome/click track',
-  'unread': 'unread — list unread open comments',
+  'click':    'click — toggle metronome/click track',
   'activity': 'activity [n] — show last n activity events (default 10)',
-  'compat': 'compat — check browser API compatibility',
-  '+': '+ — zoom in',
-  '-': '- — zoom out',
-  '++': '++ — zoom in more',
-  '--': '-- — zoom out more',
+  'compat':   'compat — check browser API compatibility',
+  '+':        '+ / ++ / +++ — zoom in 1/2/3 steps',
+  '-':        '- / -- / --- — zoom out 1/2/3 steps',
+  'help':     'help [command] — list all commands, or describe one',
 };
 
 const ZOOM_IN_FACTOR = 1.1;
@@ -387,6 +400,79 @@ export const replyToComment = (args: string): CommandResult => {
   return { ok: true, message: `Reply added to comment #${id}.` };
 };
 
+export const playCommand = (): CommandResult => {
+  const state = useStore.getState();
+  if (state.isPlaying) return { ok: true, message: 'Already playing.' };
+  state.setIsPlaying(true);
+  return { ok: true, message: `Playing from ${state.currentTime.toFixed(2)}s.` };
+};
+
+export const pauseCommand = (): CommandResult => {
+  const state = useStore.getState();
+  if (!state.isPlaying) return { ok: true, message: 'Already paused.' };
+  state.setIsPlaying(false);
+  return { ok: true, message: 'Paused.' };
+};
+
+export const stopCommand = (): CommandResult => {
+  const state = useStore.getState();
+  state.setIsPlaying(false);
+  state.setCurrentTime(0);
+  return { ok: true, message: 'Stopped.' };
+};
+
+export const setTempoCommand = (raw: string): CommandResult => {
+  const bpm = Number(raw.trim());
+  if (!Number.isFinite(bpm) || bpm <= 0) {
+    return { ok: false, message: `Invalid tempo: "${raw}". Use a number, e.g. tempo 120` };
+  }
+  useStore.getState().setTempo(bpm);
+  const actual = useStore.getState().tempo;
+  return { ok: true, message: `Tempo set to ${actual} bpm.` };
+};
+
+export const undoCommand = (): CommandResult => {
+  const state = useStore.getState();
+  if (!state.canUndo) return { ok: false, message: 'Nothing to undo.' };
+  state.undo();
+  return { ok: true, message: 'Undone.' };
+};
+
+export const redoCommand = (): CommandResult => {
+  const state = useStore.getState();
+  if (!state.canRedo) return { ok: false, message: 'Nothing to redo.' };
+  state.redo();
+  return { ok: true, message: 'Redone.' };
+};
+
+export const setMarkerCommand = (indexRaw: string, timeRaw?: string): CommandResult => {
+  const index = Number(indexRaw) as 1 | 2;
+  if (index !== 1 && index !== 2) {
+    return { ok: false, message: 'Marker index must be 1 or 2.' };
+  }
+  const state = useStore.getState();
+  if (!timeRaw || !timeRaw.trim()) {
+    state.setMarker(index, null);
+    return { ok: true, message: `Marker ${index} cleared.` };
+  }
+  const seconds = parseAbsolutePositionToken(timeRaw.trim(), state.tempo);
+  if (seconds === null) {
+    return { ok: false, message: `Invalid time: "${timeRaw}"` };
+  }
+  state.setMarker(index, seconds);
+  return { ok: true, message: `Marker ${index} set to ${seconds.toFixed(2)}s.` };
+};
+
+export const armTrackCommand = (ref: string): CommandResult => {
+  const state = useStore.getState();
+  const target = findTrackByReference(state.tracks, ref);
+  if (!target) return { ok: false, message: `Track not found: ${ref}` };
+  const next = !target.isArmed;
+  state.armTrack(target.id, next);
+  const id = localTrackId(state.tracks, target.id);
+  return { ok: true, message: `Track "${target.name}" (id: ${id}) ${next ? 'armed' : 'disarmed'}.` };
+};
+
 export const exportFromCommand = async (selectionOnly: boolean): Promise<CommandResult> => {
   const state = useStore.getState();
   if (!state.tracks?.length) {
@@ -443,7 +529,23 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
     return { ok: true, message: '' };
   }
 
-  let match = command.match(/^add\s+track\s+(.+)$/i);
+  if (/^play$/i.test(command)) return playCommand();
+  if (/^pause$/i.test(command)) return pauseCommand();
+  if (/^stop$/i.test(command)) return stopCommand();
+
+  let match = command.match(/^tempo\s+(.+)$/i);
+  if (match) return setTempoCommand(match[1]);
+
+  if (/^undo$/i.test(command)) return undoCommand();
+  if (/^redo$/i.test(command)) return redoCommand();
+
+  match = command.match(/^marker\s+([12])(?:\s+(.+))?$/i);
+  if (match) return setMarkerCommand(match[1], match[2]);
+
+  match = command.match(/^arm\s+(.+)$/i);
+  if (match) return armTrackCommand(match[1]);
+
+  match = command.match(/^add\s+track\s+(.+)$/i);
   if (match) {
     const name = match[1].trim().replace(/^"(.+)"$/, '$1').trim();
     return addTrackByName(name);
