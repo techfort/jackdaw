@@ -1,11 +1,16 @@
 import { openDB, IDBPDatabase } from 'idb';
-import { StorageService, SongData, Presence, Project, Member, Invite, Role } from './types';
+import { StorageService, SongData, Presence, Project, Member, Invite, Role, UserConfig } from './types';
 
 const DB_NAME = 'jackdaw-local-db';
 const SONGS_STORE = 'songs';
 const PROJECTS_STORE = 'projects';
 const AUDIO_CACHE_STORE = 'audio-cache';
-const VERSION = 3;
+const CONFIG_STORE = 'config';
+const VERSION = 4;
+
+/** Local user identity is per-browser; key config by user id with a stable fallback. */
+const localUserKey = (): string =>
+  JSON.parse(localStorage.getItem('jackdaw-user') || '{}').id || 'local';
 
 const generateId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID
@@ -22,10 +27,11 @@ export class LocalStorageService implements StorageService {
     this.db = openDB(DB_NAME, VERSION, {
       async upgrade(db, oldVersion, _newVersion, tx) {
         if (oldVersion < 1) {
-          // Fresh install at v3 — create all stores clean
+          // Fresh install — create all stores clean
           db.createObjectStore(SONGS_STORE, { keyPath: 'id' });
           db.createObjectStore(PROJECTS_STORE, { keyPath: 'id' });
           db.createObjectStore(AUDIO_CACHE_STORE, { keyPath: 'trackId' });
+          db.createObjectStore(CONFIG_STORE, { keyPath: 'userId' });
           return;
         }
 
@@ -49,6 +55,11 @@ export class LocalStorageService implements StorageService {
         if (oldVersion < 3) {
           // v3 adds the audio-cache store for downloaded Firebase Storage files
           db.createObjectStore(AUDIO_CACHE_STORE, { keyPath: 'trackId' });
+        }
+
+        if (oldVersion < 4) {
+          // v4 adds the config store for per-user terminal aliases + history
+          db.createObjectStore(CONFIG_STORE, { keyPath: 'userId' });
         }
       },
     });
@@ -169,6 +180,20 @@ export class LocalStorageService implements StorageService {
     const db = await this.db;
     const record = await db.get(AUDIO_CACHE_STORE, id);
     return record?.audioData ?? null;
+  }
+
+  // ── Per-user config (aliases, terminal history) ──────────────────────────
+
+  async getUserConfig(): Promise<UserConfig | null> {
+    const db = await this.db;
+    const record = await db.get(CONFIG_STORE, localUserKey());
+    if (!record) return null;
+    return { rc: record.rc ?? '', history: record.history ?? [] };
+  }
+
+  async saveUserConfig(config: UserConfig): Promise<void> {
+    const db = await this.db;
+    await db.put(CONFIG_STORE, { userId: localUserKey(), ...config });
   }
 
   // ── Members — not supported locally ──────────────────────────────────────

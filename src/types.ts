@@ -127,7 +127,17 @@ export interface DAWState {
   tempoEvents: TempoEvent[];
   showTempoSheet: boolean;
 
+  // Scripting / terminal config
+  rcText: string;
+  aliasMap: Record<string, string>;
+  terminalHistory: string[];
+  isConfigEditorOpen: boolean;
+
   // Actions
+  loadUserConfig: () => Promise<void>;
+  saveRcText: (text: string) => Promise<void>;
+  pushTerminalHistory: (command: string) => void;
+  setConfigEditorOpen: (open: boolean) => void;
   setSpectrumOpen: (open: boolean) => void;
   setClickEnabled: (enabled: boolean) => void;
   setOnline: (online: boolean) => void;

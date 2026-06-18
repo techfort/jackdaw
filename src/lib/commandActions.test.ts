@@ -379,6 +379,7 @@ describe('addCommentFromCommand auto track resolution', () => {
   it('zooms in with repeated plus signs', async () => {
     const setZoom = vi.fn();
     getStateMock
+      .mockReturnValueOnce({ aliasMap: {} }) // alias-expansion lookup
       .mockReturnValueOnce({ zoom: 100, setZoom })
       .mockReturnValueOnce({ zoom: 133.1 });
 
@@ -392,6 +393,7 @@ describe('addCommentFromCommand auto track resolution', () => {
   it('zooms out with repeated minus signs', async () => {
     const setZoom = vi.fn();
     getStateMock
+      .mockReturnValueOnce({ aliasMap: {} }) // alias-expansion lookup
       .mockReturnValueOnce({ zoom: 100, setZoom })
       .mockReturnValueOnce({ zoom: 72.9 });
 
@@ -414,7 +416,9 @@ describe('addCommentFromCommand auto track resolution', () => {
   it('toggles spectrum window with spectrum command', async () => {
     const setSpectrumOpen = vi.fn();
     getStateMock
+      .mockReturnValueOnce({ aliasMap: {} }) // alias-expansion lookup (1st call)
       .mockReturnValueOnce({ isSpectrumOpen: false, setSpectrumOpen })
+      .mockReturnValueOnce({ aliasMap: {} }) // alias-expansion lookup (2nd call)
       .mockReturnValueOnce({ isSpectrumOpen: true, setSpectrumOpen });
 
     let result = await executeTerminalCommand('spectrum');

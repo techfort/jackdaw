@@ -63,6 +63,14 @@ export interface Project {
   updatedAt: number;
 }
 
+/** Per-user, song-independent configuration (terminal aliases, history). */
+export interface UserConfig {
+  /** Raw .jackdawrc text — alias definitions + comments. Single source of truth. */
+  rc: string;
+  /** Recent terminal commands, most recent last (capped). */
+  history: string[];
+}
+
 export interface AuthService {
   getCurrentUser(): User | null;
   onAuthStateChanged(callback: (user: User | null) => void): () => void;
@@ -99,4 +107,8 @@ export interface StorageService {
   // Presence
   updatePresence(projectId: string, songId: string, cursorPosition: number): Promise<void>;
   onPresenceUpdate(projectId: string, songId: string, callback: (presences: Presence[]) => void): () => void;
+
+  // Per-user config (aliases, terminal history) — not tied to a song/project
+  getUserConfig(): Promise<UserConfig | null>;
+  saveUserConfig(config: UserConfig): Promise<void>;
 }

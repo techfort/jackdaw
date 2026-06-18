@@ -14,6 +14,7 @@ import { clamp } from './lib/clamp';
 import { getTracksMaxTime } from './lib/clipUtils';
 import { canManageFrozenTrack, FREEZE_EXEMPT_KEYS } from './lib/freezeGuard';
 import { getActorInfo } from './lib/actorInfo';
+import { parseRc } from './lib/aliases';
 
 
 interface HistoryState {
@@ -29,6 +30,9 @@ const generateId = () => {
 
 let _recordSession: RecordingSession | null = null;
 let _recordStartTime = 0;
+let _configSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+const TERMINAL_HISTORY_CAP = 100;
 
 export const useStore = create<DAWState>((set, get) => {
   const past: HistoryState[] = [];
@@ -87,6 +91,10 @@ export const useStore = create<DAWState>((set, get) => {
     currentUser: null,
     activityEvents: [],
     seenCommentIds: [],
+    rcText: '',
+    aliasMap: {},
+    terminalHistory: [],
+    isConfigEditorOpen: false,
 
     addActivityEvent: (event) => {
       const id = generateId();
@@ -118,6 +126,46 @@ export const useStore = create<DAWState>((set, get) => {
     },
 
     setCurrentUser: (user) => set({ currentUser: user }),
+
+    loadUserConfig: async () => {
+      try {
+        const config = await (storageService as any).getUserConfig?.();
+        if (!config) return;
+        set({
+          rcText: config.rc || '',
+          aliasMap: parseRc(config.rc || ''),
+          terminalHistory: Array.isArray(config.history) ? config.history : [],
+        });
+      } catch (err) {
+        console.error('Failed to load user config', err);
+      }
+    },
+
+    saveRcText: async (text) => {
+      set({ rcText: text, aliasMap: parseRc(text) });
+      try {
+        await (storageService as any).saveUserConfig?.({ rc: text, history: get().terminalHistory });
+      } catch (err) {
+        console.error('Failed to save user config', err);
+      }
+    },
+
+    setConfigEditorOpen: (open) => set({ isConfigEditorOpen: open }),
+
+    pushTerminalHistory: (command) => {
+      const trimmed = command.trim();
+      if (!trimmed) return;
+      set((state) => {
+        const next = [...state.terminalHistory, trimmed];
+        return { terminalHistory: next.slice(-TERMINAL_HISTORY_CAP) };
+      });
+      // Debounced persist so rapid command entry doesn't spam the backend.
+      if (_configSaveTimer) clearTimeout(_configSaveTimer);
+      _configSaveTimer = setTimeout(() => {
+        (storageService as any).saveUserConfig?.({ rc: get().rcText, history: get().terminalHistory })
+          .catch((err: unknown) => console.error('Failed to persist terminal history', err));
+      }, 1000);
+    },
     setSpectrumOpen: (open) => set({ isSpectrumOpen: open }),
     setClickEnabled: (enabled) => set({ isClickEnabled: enabled }),
     setOnline: (online) => set({ isOnline: online }),

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { executeTerminalCommand } from '../lib/commandActions';
+import { executeTerminalCommand, COMMAND_NAMES } from '../lib/commandActions';
 import { useStore } from '../store';
 
 type TerminalLine = {
@@ -14,14 +14,28 @@ const makeLineId = () =>
     : Math.random().toString(36).slice(2);
 
 export const CommandTerminal: React.FC = () => {
-  const isPlaying = useStore(state => state.isPlaying);
-  const setIsPlaying = useStore(state => state.setIsPlaying);
+  const history = useStore(state => state.terminalHistory);
+  const pushTerminalHistory = useStore(state => state.pushTerminalHistory);
+  const aliasMap = useStore(state => state.aliasMap);
+  const rcText = useStore(state => state.rcText);
+  const saveRcText = useStore(state => state.saveRcText);
+  const isConfigEditorOpen = useStore(state => state.isConfigEditorOpen);
+  const setConfigEditorOpen = useStore(state => state.setConfigEditorOpen);
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [historyDraft, setHistoryDraft] = useState('');
   const [showHelp, setShowHelp] = useState(false);
+  const [rcDraft, setRcDraft] = useState('');
+
+  // Autocomplete: names that match the current (single-token) input.
+  const trimmedInput = input.trim();
+  const suggestions =
+    trimmedInput && !/\s/.test(trimmedInput)
+      ? [...COMMAND_NAMES, ...Object.keys(aliasMap || {})]
+          .filter(name => name !== trimmedInput && name.startsWith(trimmedInput.toLowerCase()))
+          .slice(0, 5)
+      : [];
   const [lines, setLines] = useState<TerminalLine[]>([
     { id: makeLineId(), text: 'Ready. Type "help" for all commands.', tone: 'info' }
   ]);
@@ -72,6 +86,11 @@ export const CommandTerminal: React.FC = () => {
     '+, ++, +++          zoom in 1/2/3 steps',
     '-, --, ---          zoom out 1/2/3 steps',
     'help [command]      describe a specific command',
+    '── Scripting ─────────────────────────────────────────',
+    'alias               list defined aliases',
+    'alias n = command   define an alias (e.g. alias rec = arm sel)',
+    'unalias <name>      remove an alias',
+    'config / rc         open the .jackdawrc config editor',
   ];
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -109,6 +128,15 @@ export const CommandTerminal: React.FC = () => {
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
   }, [showHelp]);
+
+  // When the config editor opens (via the `config` command or the header button),
+  // surface the terminal and seed the editor draft with the current rc text.
+  useEffect(() => {
+    if (isConfigEditorOpen) {
+      setIsOpen(true);
+      setRcDraft(rcText || '');
+    }
+  }, [isConfigEditorOpen, rcText]);
 
   const pushLine = (text: string, tone: TerminalLine['tone']) => {
     setLines(prev => {
@@ -187,6 +215,15 @@ export const CommandTerminal: React.FC = () => {
               >
                 ?
               </button>
+              <button
+                type="button"
+                onClick={() => setConfigEditorOpen(true)}
+                className="px-1 h-4 rounded border border-[var(--color-border-main)] text-[9px] leading-none text-[var(--color-text-muted)] hover:text-white hover:border-white/40 transition-colors"
+                title="Edit .jackdawrc config (aliases)"
+                aria-label="Open config editor"
+              >
+                rc
+              </button>
             </div>
             <button
               onClick={() => setIsOpen(false)}
@@ -214,6 +251,20 @@ export const CommandTerminal: React.FC = () => {
             ))}
           </div>
 
+          {suggestions.length > 0 && (
+            <div className="px-2 py-0.5 border-t border-[var(--color-border-inner)] bg-black/10 flex items-center gap-2 overflow-hidden">
+              <span className="text-[9px] text-[var(--color-text-muted)] opacity-60 shrink-0">Tab</span>
+              {suggestions.map((s, i) => (
+                <span
+                  key={s}
+                  className={`text-[10px] font-mono ${i === 0 ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}`}
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
+
           <form
             className="h-8 border-t border-[var(--color-border-main)] px-2 bg-[var(--color-bg-sidebar)] flex items-center gap-2"
             onSubmit={(event) => {
@@ -221,7 +272,7 @@ export const CommandTerminal: React.FC = () => {
               const current = input;
               setInput('');
               if (!current.trim()) return;
-              setHistory(prev => [...prev, current]);
+              pushTerminalHistory(current);
               setHistoryIndex(-1);
               setHistoryDraft('');
               void handleCommand(current);
@@ -241,7 +292,13 @@ export const CommandTerminal: React.FC = () => {
               onKeyDown={(event) => {
                 if (event.key === 'Tab') {
                   event.preventDefault();
-                  (event.currentTarget as HTMLInputElement).blur();
+                  // Non-empty input → accept the top autocomplete suggestion.
+                  // Empty input → blur (lets Tab toggle focus out of the terminal).
+                  if (suggestions.length > 0) {
+                    setInput(suggestions[0] + ' ');
+                  } else {
+                    (event.currentTarget as HTMLInputElement).blur();
+                  }
                   return;
                 }
 
@@ -281,6 +338,46 @@ export const CommandTerminal: React.FC = () => {
                       {line}
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isConfigEditorOpen && (
+            <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-[1px] flex items-center justify-center p-6">
+              <div className="w-full max-w-2xl max-h-[80vh] rounded border border-[var(--color-border-main)] bg-[var(--color-bg-sidebar)] flex flex-col overflow-hidden">
+                <div className="h-8 px-3 border-b border-[var(--color-border-main)] flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-muted)]">.jackdawrc — aliases &amp; config</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={async () => { await saveRcText(rcDraft); setConfigEditorOpen(false); }}
+                      className="text-[10px] px-2 py-0.5 rounded bg-[var(--color-accent)]/20 border border-[var(--color-accent)]/40 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/30 transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfigEditorOpen(false)}
+                      className="text-[10px] px-2 py-0.5 rounded text-[var(--color-text-muted)] hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-hidden p-3 bg-[var(--color-bg-deep)]/30 flex flex-col gap-2">
+                  <p className="text-[10px] text-[var(--color-text-muted)] opacity-70 leading-4">
+                    One alias per line: <span className="font-mono text-[var(--color-text-muted)]">alias &lt;name&gt; = &lt;command&gt;</span>. Lines starting with # are comments. Copy/paste to share your setup.
+                  </p>
+                  <textarea
+                    value={rcDraft}
+                    onChange={(e) => setRcDraft(e.target.value)}
+                    spellCheck={false}
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    placeholder={'# JackDAW config\nalias rec = arm sel\nalias bounce = e\nalias z = spectrum'}
+                    className="flex-1 min-h-[200px] w-full resize-none bg-[var(--color-bg-deep)]/50 border border-[var(--color-border-inner)] rounded p-2 text-[12px] font-mono text-white outline-none focus:border-[var(--color-accent)]/50"
+                  />
                 </div>
               </div>
             </div>

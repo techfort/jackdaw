@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { sendSignInLinkToEmail } from 'firebase/auth';
 import { db, auth, OperationType, handleFirestoreError, trackFirestoreRead, trackFirestoreWrite } from '../firebaseService';
-import { StorageService, SongData, Presence, Project, Member, Invite, Role, ConcurrentUpdateError } from './types';
+import { StorageService, SongData, Presence, Project, Member, Invite, Role, ConcurrentUpdateError, UserConfig } from './types';
 import { createAudioStorage } from '../audioStorage';
 
 const generateId = () =>
@@ -338,6 +338,32 @@ export class FirebaseStorageService implements StorageService {
       await updateDoc(doc(db, 'projects', id), { ...data, updatedAt: Date.now() });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `projects/${id}`);
+    }
+  }
+
+  // ── Per-user config (aliases, terminal history) ──────────────────────────
+
+  async getUserConfig(): Promise<UserConfig | null> {
+    const uid = this.getUserKey();
+    if (!uid) return null;
+    try {
+      const snap = await getDoc(doc(db, 'users', uid));
+      const config = snap.exists() ? (snap.data().config as UserConfig | undefined) : undefined;
+      if (!config) return null;
+      return { rc: config.rc ?? '', history: config.history ?? [] };
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, `users/${uid}`);
+      return null;
+    }
+  }
+
+  async saveUserConfig(config: UserConfig): Promise<void> {
+    const uid = this.getUserKey();
+    if (!uid) return;
+    try {
+      await setDoc(doc(db, 'users', uid), { config }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `users/${uid}`);
     }
   }
 

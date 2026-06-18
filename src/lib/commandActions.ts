@@ -6,6 +6,7 @@ import { checkBrowserCompat } from './browserCompat';
 import { clamp } from './clamp';
 import { getClipEnd } from './clipUtils';
 import { parseAbsolutePositionToken, parseRelativeToken } from './positionParser';
+import { expandAliases, setRcAlias, removeRcAlias } from './aliases';
 
 let _punchInTrigger: (() => void) | null = null;
 
@@ -71,7 +72,20 @@ const COMMAND_HELP: Record<string, string> = {
   '+':        '+ / ++ / +++ — zoom in 1/2/3 steps',
   '-':        '- / -- / --- — zoom out 1/2/3 steps',
   'help':     'help [command] — list all commands, or describe one',
+  // Scripting
+  'alias':    'alias [name = command] — list aliases, or define one (e.g. alias rec = arm sel)',
+  'unalias':  'unalias <name> — remove an alias',
+  'config':   'config — open the .jackdawrc config editor (alias: rc)',
 };
+
+/** Command name tokens for autocomplete (the leading word the user types). */
+export const COMMAND_NAMES: string[] = Array.from(
+  new Set(
+    Object.keys(COMMAND_HELP)
+      .map(k => k.split(/[\s:]/)[0])      // 'add track' → 'add', 'c:' → 'c'
+      .filter(k => /^[a-z]/i.test(k))     // drop symbol-only entries like '+'/'-'
+  )
+);
 
 const ZOOM_IN_FACTOR = 1.1;
 const ZOOM_OUT_FACTOR = 0.9;
@@ -400,6 +414,42 @@ export const replyToComment = (args: string): CommandResult => {
   return { ok: true, message: `Reply added to comment #${id}.` };
 };
 
+export const listAliases = (): CommandResult => {
+  const aliasMap = useStore.getState().aliasMap || {};
+  const names = Object.keys(aliasMap).sort();
+  if (names.length === 0) {
+    return { ok: true, message: 'No aliases defined. Add one with: alias <name> = <command>' };
+  }
+  const lines = names.map(name => `${name} = ${aliasMap[name]}`);
+  return { ok: true, message: lines.join('\n') };
+};
+
+export const setAliasCommand = async (name: string, body: string): Promise<CommandResult> => {
+  const trimmedName = name.trim();
+  const trimmedBody = body.trim();
+  if (!trimmedName || /\s/.test(trimmedName)) {
+    return { ok: false, message: 'Alias name must be a single word. Usage: alias <name> = <command>' };
+  }
+  if (!trimmedBody) {
+    return { ok: false, message: 'Alias body is required. Usage: alias <name> = <command>' };
+  }
+  const state = useStore.getState();
+  const nextRc = setRcAlias(state.rcText || '', trimmedName, trimmedBody);
+  await state.saveRcText(nextRc);
+  return { ok: true, message: `Alias set: ${trimmedName} = ${trimmedBody}` };
+};
+
+export const removeAliasCommand = async (name: string): Promise<CommandResult> => {
+  const trimmedName = name.trim();
+  const state = useStore.getState();
+  if (!(state.aliasMap || {})[trimmedName]) {
+    return { ok: false, message: `No alias named "${trimmedName}".` };
+  }
+  const nextRc = removeRcAlias(state.rcText || '', trimmedName);
+  await state.saveRcText(nextRc);
+  return { ok: true, message: `Removed alias "${trimmedName}".` };
+};
+
 export const playCommand = (): CommandResult => {
   const state = useStore.getState();
   if (state.isPlaying) return { ok: true, message: 'Already playing.' };
@@ -524,10 +574,29 @@ export const zoomFromTerminalSigns = (signs: string): CommandResult => {
 };
 
 export const executeTerminalCommand = async (raw: string): Promise<CommandResult> => {
-  const command = raw.trim();
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { ok: true, message: '' };
+  }
+
+  // Expand user-defined aliases (from .jackdawrc) before dispatching.
+  const command = expandAliases(trimmed, useStore.getState().aliasMap || {});
   if (!command) {
     return { ok: true, message: '' };
   }
+
+  // Config / alias management (text-first .jackdawrc is the source of truth)
+  if (/^(config|rc)$/i.test(command)) {
+    useStore.getState().setConfigEditorOpen?.(true);
+    return { ok: true, message: 'Opening config editor…' };
+  }
+
+  let aliasMatch = command.match(/^alias\s+(\S+)\s*=\s*(.+)$/i);
+  if (aliasMatch) return setAliasCommand(aliasMatch[1], aliasMatch[2]);
+  if (/^alias$/i.test(command)) return listAliases();
+
+  aliasMatch = command.match(/^unalias\s+(\S+)$/i);
+  if (aliasMatch) return removeAliasCommand(aliasMatch[1]);
 
   if (/^play$/i.test(command)) return playCommand();
   if (/^pause$/i.test(command)) return pauseCommand();

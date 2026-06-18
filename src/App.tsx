@@ -260,6 +260,8 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = authService.onAuthStateChanged((user) => {
       useStore.getState().setCurrentUser(user);
+      // Load per-user terminal config (aliases + history) once we know the user.
+      if (user) useStore.getState().loadUserConfig().catch(console.error);
       if (storageMode === 'firebase') {
         setShowSignInGate(!user);
         if (user) {
