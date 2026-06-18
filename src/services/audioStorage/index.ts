@@ -1,7 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { openDB } from 'idb';
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { getApp } from 'firebase/app';
 
 export interface IAudioStorage {
   upload(key: string, data: ArrayBuffer, mimeType: string): Promise<string>;
@@ -54,8 +52,9 @@ export class SupabaseAudioStorage implements IAudioStorage {
   async upload(key: string, data: ArrayBuffer, mimeType: string): Promise<string> {
     const { error } = await this.storage
       .from(this.bucket)
-      .upload(key, data, { contentType: mimeType, upsert: false });
+      .upload(key, data, { contentType: mimeType, upsert: true });
     if (error && !/already exists/i.test(error.message)) {
+      console.error('Supabase upload error details:', JSON.stringify(error));
       throw new Error(`Supabase upload failed: ${error.message}`);
     }
     const { data: urlData } = this.storage.from(this.bucket).getPublicUrl(key);
@@ -64,24 +63,6 @@ export class SupabaseAudioStorage implements IAudioStorage {
 
   async delete(key: string): Promise<void> {
     await this.storage.from(this.bucket).remove([key]);
-  }
-}
-
-export class FirebaseAudioStorage implements IAudioStorage {
-  private storage = getStorage(getApp());
-
-  async upload(key: string, data: ArrayBuffer, mimeType: string): Promise<string> {
-    const storageRef = ref(this.storage, key);
-    await uploadBytes(storageRef, data, { contentType: mimeType });
-    return getDownloadURL(storageRef);
-  }
-
-  async delete(key: string): Promise<void> {
-    try {
-      await deleteObject(ref(this.storage, key));
-    } catch {
-      // Ignore "object not found" on delete
-    }
   }
 }
 
@@ -118,17 +99,6 @@ export function createAudioStorage(getIdToken: () => Promise<string>): IAudioSto
   if (storageMode === 'local') {
     audioStorageSingleton = new LocalAudioStorage();
     return audioStorageSingleton;
-  }
-
-  // In Firebase mode, prefer Firebase Storage (already auth'd via Firebase Auth)
-  // over Supabase to avoid bucket configuration / anon-key permission issues.
-  if (storageMode === 'firebase') {
-    try {
-      audioStorageSingleton = new FirebaseAudioStorage();
-      return audioStorageSingleton;
-    } catch {
-      // Fall through to Supabase if Firebase Storage isn't available
-    }
   }
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
