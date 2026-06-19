@@ -167,12 +167,19 @@ export class FirebaseStorageService implements StorageService {
       const payload = { ...dataWithoutBase, tracks: firestoreTracks, updatedAt };
       trackFirestoreWrite(`projects/${projectId}/songs/${songId}`);
 
+      // Clips present in the doc BEFORE this save — used to garbage-collect the
+      // preview audio of clips removed in this save. Captured from the snapshot
+      // the concurrency transaction already reads, so there is no extra read.
+      let prevClips: any[] = [];
+
       if (typeof baseUpdatedAt === 'number') {
         // Optimistic concurrency: reject if server has been updated since our last sync
         await runTransaction(db, async (tx) => {
           const snap = await tx.get(songRef);
           if (snap.exists()) {
-            const serverUpdatedAt: number = snap.data().updatedAt ?? 0;
+            const sd = snap.data();
+            prevClips = (sd.tracks || []).flatMap((t: any) => t.clips || []);
+            const serverUpdatedAt: number = sd.updatedAt ?? 0;
             if (serverUpdatedAt > baseUpdatedAt) {
               throw new ConcurrentUpdateError(serverUpdatedAt);
             }
@@ -180,7 +187,30 @@ export class FirebaseStorageService implements StorageService {
           tx.set(songRef, payload, { merge: true });
         });
       } else {
+        const snap = await getDoc(songRef);
+        if (snap.exists()) prevClips = (snap.data().tracks || []).flatMap((t: any) => t.clips || []);
         await setDoc(songRef, payload, { merge: true });
+      }
+
+      // Garbage-collect preview audio for clips that existed before but are gone
+      // now. Undo-safe: a deleted-then-restored clip is present in firestoreTracks
+      // so it is never treated as an orphan. Non-fatal — the save already landed.
+      try {
+        // Only GC when this save actually carries the track list — a partial
+        // (metadata-only) save must never be read as "all clips removed".
+        const newClipIds = new Set(
+          firestoreTracks.flatMap((t: any) => (t.clips || []).map((c: any) => c.id))
+        );
+        const orphanIds: string[] = !Array.isArray(data.tracks) ? [] : prevClips
+          .filter(c => c && c.id && c.storagePath && !newClipIds.has(c.id))
+          .map(c => c.id);
+        if (orphanIds.length > 0) {
+          const keys = orphanIds.map(id => `projects/${projectId}/songs/${songId}/clips/${id}.mp3`);
+          await audioStorage.deleteMany(keys);
+          await localCache.deleteCachedAudio(orphanIds).catch(() => {});
+        }
+      } catch (gcErr) {
+        console.warn('Preview audio garbage-collection failed (non-fatal):', gcErr);
       }
     } catch (err) {
       if (err instanceof ConcurrentUpdateError) throw err;
@@ -218,6 +248,28 @@ export class FirebaseStorageService implements StorageService {
 
   async deleteSong(projectId: string, songId: string): Promise<void> {
     try {
+      // Clean up the song's preview audio before removing the doc. Best-effort:
+      // failure here must not block the song deletion itself.
+      try {
+        const songRef = doc(db, 'projects', projectId, 'songs', songId);
+        const snap = await getDoc(songRef);
+        if (snap.exists()) {
+          const clips = (snap.data().tracks || []).flatMap((t: any) => t.clips || []);
+          const ids: string[] = clips.filter((c: any) => c && c.id && c.storagePath).map((c: any) => c.id);
+          if (ids.length > 0) {
+            const audioStorage = createAudioStorage(async () => {
+              const token = await auth.currentUser?.getIdToken();
+              return token ?? '';
+            });
+            const keys = ids.map(id => `projects/${projectId}/songs/${songId}/clips/${id}.mp3`);
+            await audioStorage.deleteMany(keys);
+            const { LocalStorageService } = await import('./LocalStorage');
+            await new LocalStorageService().deleteCachedAudio(ids).catch(() => {});
+          }
+        }
+      } catch (cleanupErr) {
+        console.warn('Preview audio cleanup on deleteSong failed (non-fatal):', cleanupErr);
+      }
       await deleteDoc(doc(db, 'projects', projectId, 'songs', songId));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `projects/${projectId}/songs/${songId}`);

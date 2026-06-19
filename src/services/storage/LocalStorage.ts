@@ -99,6 +99,16 @@ export class LocalStorageService implements StorageService {
 
     await db.put(SONGS_STORE, updated);
 
+    // Evict cached audio for clips removed in this save (local economy). Guarded
+    // so a partial save without tracks never wipes the cache; undo-safe since a
+    // restored clip is present in data.tracks.
+    if (Array.isArray(data.tracks)) {
+      const prevClips: any[] = ((existing as any)?.tracks || []).flatMap((t: any) => t.clips || []);
+      const newClipIds = new Set(data.tracks.flatMap((t: any) => (t.clips || []).map((c: any) => c.id)));
+      const orphanIds = prevClips.filter(c => c && c.id && !newClipIds.has(c.id)).map(c => c.id);
+      if (orphanIds.length > 0) await this.deleteCachedAudio(orphanIds).catch(() => {});
+    }
+
     this.broadcastChannel?.postMessage({ type: 'song-update', key, data: updated });
     this.listeners.get(key)?.forEach(cb => cb(updated));
   }
@@ -127,7 +137,14 @@ export class LocalStorageService implements StorageService {
 
   async deleteSong(projectId: string, songId: string): Promise<void> {
     const db = await this.db;
-    await db.delete(SONGS_STORE, `${projectId}/${songId}`);
+    const key = `${projectId}/${songId}`;
+    const existing: any = await db.get(SONGS_STORE, key);
+    const clipIds: string[] = ((existing?.tracks || []) as any[])
+      .flatMap((t: any) => t.clips || [])
+      .filter((c: any) => c && c.id)
+      .map((c: any) => c.id);
+    await db.delete(SONGS_STORE, key);
+    if (clipIds.length > 0) await this.deleteCachedAudio(clipIds).catch(() => {});
   }
 
   // ── Project ops ───────────────────────────────────────────────────────────
@@ -180,6 +197,13 @@ export class LocalStorageService implements StorageService {
     const db = await this.db;
     const record = await db.get(AUDIO_CACHE_STORE, id);
     return record?.audioData ?? null;
+  }
+
+  /** Evict cached audio for removed clips so the local cache doesn't leak. */
+  async deleteCachedAudio(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const db = await this.db;
+    await Promise.all(ids.map(id => db.delete(AUDIO_CACHE_STORE, id)));
   }
 
   // ── Per-user config (aliases, terminal history) ──────────────────────────
