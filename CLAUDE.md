@@ -52,13 +52,23 @@ bd close <id>         # Complete work
 
 ## Build & Test
 
-_Add your build and test commands here_
+Tooling is managed by **mise** (`mise.toml` pins Node and defines all tasks).
+First time in the repo: `mise trust && mise run setup`. Run `mise tasks` to list.
 
 ```bash
-# Example:
-# npm install
-# npm test
+mise run setup        # npm install
+mise run dev          # Vite dev server (port 3000)
+mise run lint         # tsc --noEmit (type-check)
+mise run test         # vitest
+mise run build        # production build, local storage mode
+mise run build-prod   # production build, firebase storage mode
+mise run deploy       # build-prod + firebase deploy --only hosting
+mise run deploy-rules # firebase deploy --only firestore (rules + indexes)
+mise run deploy-all   # build-prod + full firebase deploy
 ```
+
+Underlying commands still live in `package.json` scripts; mise wraps them, pins
+the Node version, and adds the deploy tasks.
 
 ## Architecture Overview
 

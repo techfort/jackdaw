@@ -1,0 +1,55 @@
+# mise configuration — pinned tooling + standard tasks.
+# Run `mise tasks` to list everything, `mise run <task>` to execute.
+
+[tools]
+node = "24"
+
+[env]
+# Default storage backend for local dev. `build-prod`/`deploy` override to firebase.
+VITE_STORAGE_MODE = "local"
+
+[tasks.setup]
+description = "Install npm dependencies"
+run = "npm install"
+
+[tasks.dev]
+description = "Start the Vite dev server (port 3000)"
+run = "npm run dev"
+
+[tasks.build]
+description = "Production build (local storage mode)"
+run = "npm run build"
+
+[tasks.build-prod]
+description = "Production build with Firebase storage mode"
+run = "npm run build:prod"
+
+[tasks.preview]
+description = "Serve the production build locally"
+run = "npm run preview"
+
+[tasks.lint]
+description = "Type-check the project (tsc --noEmit)"
+run = "npm run lint"
+
+[tasks.test]
+description = "Run the test suite"
+run = "npm run test"
+
+[tasks.clean]
+description = "Remove build artifacts (dist, server.js)"
+run = "npm run clean"
+
+[tasks.deploy]
+description = "Build (firebase mode) and deploy hosting to Firebase"
+depends = ["build-prod"]
+run = "npx -y firebase-tools deploy --only hosting"
+
+[tasks.deploy-rules]
+description = "Deploy Firestore security rules and indexes"
+run = "npx -y firebase-tools deploy --only firestore"
+
+[tasks.deploy-all]
+description = "Build (firebase mode) and deploy hosting + Firestore rules/indexes"
+depends = ["build-prod"]
+run = "npx -y firebase-tools deploy"
