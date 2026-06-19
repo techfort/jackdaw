@@ -2,6 +2,7 @@ import React from 'react';
 import { useStore } from '../store';
 import { TrackData } from '../types';
 import { Volume2, VolumeX } from 'lucide-react';
+import { MasterMeter } from './MasterMeter';
 
 interface ChannelStripProps {
   track: TrackData;
@@ -112,15 +113,7 @@ export const Mixer: React.FC = () => {
         </div>
         <div className="flex-1 flex flex-col items-center justify-center p-4 gap-4">
            {/* Master Meters */}
-           <div className="flex gap-1 h-48 w-10 bg-[var(--color-bg-deep)] p-1 rounded border border-[var(--color-border-main)]">
-              <div className="flex-1 bg-[var(--color-bg-input)] relative overflow-hidden">
-                <div className="absolute bottom-0 w-full bg-[var(--color-accent)] opacity-60" style={{ height: '5%' }} />
-              </div>
-              <div className="flex-1 bg-[var(--color-bg-input)] relative overflow-hidden">
-                <div className="absolute bottom-0 w-full bg-[var(--color-accent)] opacity-60" style={{ height: '7%' }} />
-              </div>
-           </div>
-           <div className="text-[10px] font-mono text-[var(--color-text-muted)]">0.0 dB</div>
+           <MasterMeter />
         </div>
         <div className="h-10 bg-gradient-to-r from-[var(--color-accent-purple)] to-[var(--color-accent)] flex items-center justify-center text-white font-black text-[10px] tracking-tight uppercase">
           Output
