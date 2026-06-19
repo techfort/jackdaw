@@ -1,12 +1,42 @@
-import React from 'react';
+import React, { useCallback, useRef } from 'react';
 import { useStore } from '../store';
 import { TrackData } from '../types';
 import { Volume2, VolumeX } from 'lucide-react';
 import { MasterMeter } from './MasterMeter';
+import { getTrackAnalyser } from '../lib/sharedAudioContext';
+import { useMeter, meterColor } from '../hooks/useMeter';
 
 interface ChannelStripProps {
   track: TrackData;
 }
+
+/** Live per-channel meter, driven by the track's analyser. */
+const ChannelMeter: React.FC<{ trackId: string }> = ({ trackId }) => {
+  const barA = useRef<HTMLDivElement>(null);
+  const barB = useRef<HTMLDivElement>(null);
+  const getAnalyser = useCallback(() => getTrackAnalyser(trackId), [trackId]);
+
+  useMeter(getAnalyser, (level) => {
+    const heightPct = Math.min(100, level * 100);
+    const color = meterColor(level);
+    for (const bar of [barA.current, barB.current]) {
+      if (!bar) continue;
+      bar.style.height = `${heightPct}%`;
+      bar.style.backgroundColor = color;
+    }
+  });
+
+  return (
+    <div className="absolute inset-x-0 top-0 bottom-0 pointer-events-none px-4 py-4 flex gap-1">
+      <div className="flex-1 bg-[var(--color-bg-input)] rounded-sm relative overflow-hidden">
+        <div ref={barA} className="absolute bottom-0 w-full opacity-50" style={{ height: '0%' }} />
+      </div>
+      <div className="flex-1 bg-[var(--color-bg-input)] rounded-sm relative overflow-hidden">
+        <div ref={barB} className="absolute bottom-0 w-full opacity-50" style={{ height: '0%' }} />
+      </div>
+    </div>
+  );
+};
 
 const ChannelStrip = React.memo<ChannelStripProps>(({ track }) => {
   const updateTrack = useStore(state => state.updateTrack);
@@ -21,20 +51,7 @@ const ChannelStrip = React.memo<ChannelStripProps>(({ track }) => {
 
       {/* Meter Area */}
       <div className="flex-1 px-4 py-4 flex gap-1 justify-center relative">
-        <div className="absolute inset-x-0 top-0 bottom-0 pointer-events-none px-4 py-4 flex gap-1">
-           <div className="flex-1 bg-[var(--color-bg-input)] rounded-sm relative overflow-hidden">
-             <div 
-               className="absolute bottom-0 w-full bg-[var(--color-accent)] opacity-40 transition-all duration-75" 
-               style={{ height: `${track.volume * 85}%` }} 
-             />
-           </div>
-           <div className="flex-1 bg-[var(--color-bg-input)] rounded-sm relative overflow-hidden">
-             <div 
-               className="absolute bottom-0 w-full bg-[var(--color-accent)] opacity-40 transition-all duration-75" 
-               style={{ height: `${track.volume * 80}%` }} 
-             />
-           </div>
-        </div>
+        <ChannelMeter trackId={track.id} />
 
         {/* Vertical Fader */}
         <div className="relative z-10 w-full flex justify-center">
