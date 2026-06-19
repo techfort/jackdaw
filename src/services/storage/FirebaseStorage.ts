@@ -206,8 +206,11 @@ export class FirebaseStorageService implements StorageService {
           .map(c => c.id);
         if (orphanIds.length > 0) {
           const keys = orphanIds.map(id => `projects/${projectId}/songs/${songId}/clips/${id}.mp3`);
+          // Reclaim the remote (paid) Supabase storage only. The local IDB cache
+          // copy is deliberately kept so this browser can still render/play the
+          // clip from cache (getSong is cache-first) after the remote preview is
+          // gone — e.g. undo-after-save or reload on the recording machine.
           await audioStorage.deleteMany(keys);
-          await localCache.deleteCachedAudio(orphanIds).catch(() => {});
         }
       } catch (gcErr) {
         console.warn('Preview audio garbage-collection failed (non-fatal):', gcErr);
