@@ -77,6 +77,7 @@ export const useStore = create<DAWState>((set, get) => {
     markers: { 1: null, 2: null },
     markerLabels: { 1: '', 2: '' },
     selectedTrackId: null,
+    selectedClipIds: [],
     showMixer: false,
     isSpectrumOpen: false,
     isClickEnabled: false,
@@ -195,6 +196,27 @@ export const useStore = create<DAWState>((set, get) => {
     setShowTempoSheet: (show) => set({ showTempoSheet: show }),
 
     setSelectedTrackId: (id) => set({ selectedTrackId: id }),
+
+    setSelectedClipIds: (ids) => set({ selectedClipIds: ids }),
+
+    clearClipSelection: () => set({ selectedClipIds: [] }),
+
+    deleteSelectedClips: () => {
+      const ids = get().selectedClipIds;
+      if (ids.length === 0) return;
+      const { currentUser, currentUserRole } = get();
+      pushToHistory();
+      set((state) => ({
+        tracks: state.tracks.map(t => {
+          // Skip frozen tracks the user can't manage — their clips stay put.
+          if (t.isFrozen && !canManageFrozenTrack(t, currentUser, currentUserRole)) return t;
+          return { ...t, clips: (t.clips || []).filter(c => !ids.includes(c.id)) };
+        }),
+        selectedClipIds: [],
+        canUndo: true,
+      }));
+      get().pushUpdate().catch(err => console.error("Update failed", err));
+    },
 
     armTrack: (trackId, armed) => {
       set((state) => ({

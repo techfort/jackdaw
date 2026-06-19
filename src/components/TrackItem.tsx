@@ -115,6 +115,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const setCommentDraft = useStore(state => state.setCommentDraft);
   const selectedTrackId = useStore(state => state.selectedTrackId);
   const setSelectedTrackId = useStore(state => state.setSelectedTrackId);
+  const selectedClipIds = useStore(state => state.selectedClipIds);
   const currentProjectId = useStore(state => state.currentProjectId);
   const isSelected = selectedTrackId === track.id;
 
@@ -332,20 +333,23 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
         {/* The Clips */}
         {(track.clips || []).map((clip) => {
           const isClipMuted = clip.isMuted || track.isMuted;
-          const waveformColor = isSelected 
-            ? (isClipMuted ? 'rgba(0,0,0,0.4)' : '#000000') 
+          const isMarqueeSelected = selectedClipIds.includes(clip.id);
+          const waveformColor = isSelected
+            ? (isClipMuted ? 'rgba(0,0,0,0.4)' : '#000000')
             : (isClipMuted ? 'var(--color-text-dark)' : 'var(--color-accent)');
 
           return (
             <div
               key={clip.id}
+              data-clip-id={clip.id}
+              data-track-id={track.id}
               className={`h-[80px] my-[16px] absolute rounded border group/clip transition-all ${
                 !canEdit ? 'cursor-not-allowed' :
                 activeTool === 'scissors' ? 'cursor-crosshair active:scale-y-95' :
                 activeTool === 'mute' ? 'cursor-pointer' :
                 'cursor-move'
-              } ${isSelected ? 'bg-[var(--color-accent)] border-black/40 z-10' : 'bg-[var(--color-accent)]/5 border-[var(--color-accent)]/20'} ${track.isFrozen && !canEdit ? 'opacity-60' : ''}`}
-              style={{ 
+              } ${isSelected ? 'bg-[var(--color-accent)] border-black/40 z-10' : 'bg-[var(--color-accent)]/5 border-[var(--color-accent)]/20'} ${isMarqueeSelected ? 'ring-2 ring-inset ring-[var(--color-accent)] z-10' : ''} ${track.isFrozen && !canEdit ? 'opacity-60' : ''}`}
+              style={{
                 left: (Number(clip.offset) || 0) * (Number(zoom) || 100),
                 width: (Number(clip.duration) || 0) * (Number(zoom) || 100),
                 opacity: isClipMuted && !isSelected ? 0.3 : 1
@@ -381,12 +385,45 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
               let mode: 'move' | 'resize-start' | 'resize-end' = 'move';
               if (xInClip < handleWidth) mode = 'resize-start';
               else if (xInClip > rect.width - handleWidth) mode = 'resize-end';
-              
+
+              // Group move: if this clip is part of a marquee selection, drag the
+              // whole group together preserving relative offsets. Clicking a clip
+              // outside the current selection clears it (single-clip behaviour).
+              const selectedClipIds = useStore.getState().selectedClipIds;
+              const isGroupMove = mode === 'move' && selectedClipIds.includes(clip.id) && selectedClipIds.length > 1;
+              let groupInitial: { trackId: string; clipId: string; offset: number }[] = [];
+              let groupMinOffset = 0;
+              if (isGroupMove) {
+                groupInitial = useStore.getState().tracks.flatMap(t =>
+                  (t.clips || [])
+                    .filter(c => selectedClipIds.includes(c.id))
+                    .map(c => ({ trackId: t.id, clipId: c.id, offset: c.offset }))
+                );
+                groupMinOffset = Math.min(...groupInitial.map(g => g.offset));
+              } else if (selectedClipIds.length > 0 && !selectedClipIds.includes(clip.id)) {
+                useStore.getState().setSelectedClipIds([]);
+              }
+
               const handleMouseMove = (moveEvent: MouseEvent) => {
                 const deltaX = moveEvent.clientX - startX;
                 const deltaTime = deltaX / zoom;
-                
+
                 if (mode === 'move') {
+                  if (isGroupMove) {
+                    let delta = deltaTime;
+                    if (snapEnabled && timelineMode === 'beats') {
+                      const beatDuration = 60 / tempo;
+                      const snappedDragged = Math.round((initialOffset + delta) / beatDuration) * beatDuration;
+                      delta = snappedDragged - initialOffset;
+                    }
+                    // Clamp so the earliest clip in the group never crosses 0,
+                    // keeping all relative positions intact.
+                    if (delta < -groupMinOffset) delta = -groupMinOffset;
+                    for (const g of groupInitial) {
+                      updateClip(g.trackId, g.clipId, { offset: g.offset + delta }, true);
+                    }
+                    return;
+                  }
                   let newOffset = initialOffset + deltaTime;
                   if (snapEnabled && timelineMode === 'beats') {
                     const beatDuration = 60 / tempo;

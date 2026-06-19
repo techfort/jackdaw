@@ -115,6 +115,7 @@ export interface DAWState {
   markers: { 1: number | null, 2: number | null };
   markerLabels: { 1: string; 2: string };
   selectedTrackId: string | null;
+  selectedClipIds: string[]; // clips currently in the marquee multi-selection
   showMixer: boolean;
   isSpectrumOpen: boolean;
   isClickEnabled: boolean;
@@ -154,6 +155,9 @@ export interface DAWState {
   stopRecording: () => Promise<void>;
   addRecordedClip: (trackId: string, buffer: AudioBuffer, audioData: ArrayBuffer, offset: number) => void;
   setSelectedTrackId: (id: string | null) => void;
+  setSelectedClipIds: (ids: string[]) => void;
+  clearClipSelection: () => void;
+  deleteSelectedClips: () => void;
   setShowMixer: (show: boolean) => void;
   clearSong: () => void;
   loadProject: (state: Partial<DAWState>) => void;

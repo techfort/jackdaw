@@ -21,6 +21,7 @@ import { Dropzone } from './components/Dropzone';
 import { Mixer } from './components/Mixer';
 import { CollaborationPanel } from './components/CollaborationPanel';
 import { CollaborativeCursors } from './components/CollaborativeCursors';
+import { MarqueeOverlay } from './components/MarqueeOverlay';
 import { ProjectDashboard } from './components/ProjectDashboard';
 import { InviteAccept } from './components/InviteAccept';
 import { SignInGate } from './components/SignInGate';
@@ -189,6 +190,11 @@ export default function App() {
       } else if (key === 'v') {
         e.preventDefault();
         state.setSpectrumOpen(!state.isSpectrumOpen);
+      } else if (key === 'delete' || key === 'backspace') {
+        if (state.selectedClipIds.length > 0) {
+          e.preventDefault();
+          state.deleteSelectedClips();
+        }
       }
     };
 
@@ -301,6 +307,7 @@ export default function App() {
   }, [currentProjectId, currentSongId, syncSong]);
 
   const viewportRef = useRef<HTMLDivElement>(null);
+  const tracksAreaRef = useRef<HTMLDivElement>(null);
 
   // Zoom and Scroll handlers
   // Listener is on document (not viewportRef) so it works even when the viewport
@@ -439,8 +446,9 @@ export default function App() {
                    </div>
                 </div>
               ) : (
-                <div className="relative">
+                <div className="relative" ref={tracksAreaRef}>
                   <CollaborativeCursors />
+                  <MarqueeOverlay containerRef={tracksAreaRef} />
                   {tracks.map(track => (
                     <TrackItem key={track.id} track={track} />
                   ))}
