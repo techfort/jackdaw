@@ -85,6 +85,7 @@ export const useStore = create<DAWState>((set, get) => {
     availableInputDevices: [],
     selectedInputDeviceId: null,
     isRecording: false,
+    recordingStartTime: 0,
     isMonitoring: false,
     tempoEvents: [],
     showTempoSheet: false,
@@ -215,7 +216,7 @@ export const useStore = create<DAWState>((set, get) => {
       // released by the driver yet.
       await new Promise<void>(r => setTimeout(r, 80));
       _recordStartTime = get().currentTime;
-      set({ isRecording: true });
+      set({ isRecording: true, recordingStartTime: _recordStartTime });
       try {
         _recordSession = await startCapture(selectedInputDeviceId);
       } catch (err) {

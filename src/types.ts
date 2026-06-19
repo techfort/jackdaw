@@ -123,6 +123,7 @@ export interface DAWState {
   availableInputDevices: MediaDeviceInfo[];
   selectedInputDeviceId: string | null;
   isRecording: boolean;
+  recordingStartTime: number; // timeline seconds where the in-progress take began
   isMonitoring: boolean;
   tempoEvents: TempoEvent[];
   showTempoSheet: boolean;

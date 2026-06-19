@@ -27,6 +27,7 @@ import {
   soloTrackByReference,
 } from '../lib/commandActions';
 import { CommentDraftOverlay } from './CommentDraftOverlay';
+import { RecordingClip } from './RecordingClip';
 
 interface TrackItemProps {
   track: TrackData;
@@ -37,6 +38,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const toggleFreezeTrack = useStore(state => state.toggleFreezeTrack);
   const armTrack = useStore(state => state.armTrack);
   const isRecording = useStore(state => state.isRecording);
+  const recordingStartTime = useStore(state => state.recordingStartTime);
   const currentUser = useStore(state => state.currentUser);
   const currentUserRole = useStore(state => state.currentUserRole);
   const zoom = useStore(state => state.zoom);
@@ -482,6 +484,11 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
           </div>
         );
       })}
+
+        {/* Live recording indicator — clip-shaped box on the armed track */}
+        {isRecording && track.isArmed && (
+          <RecordingClip startTime={recordingStartTime} />
+        )}
 
         {trackComments.map((comment) => (
           <div
