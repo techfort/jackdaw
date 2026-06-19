@@ -4,25 +4,30 @@ on:
     branches:
       - main
 jobs:
-  build_and_deploy:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+      - uses: jdx/mise-action@v2
       - run: npm ci
-      - run: npm run lint
-      - run: npm run test
+      - run: mise run lint
+      - run: mise run test
+
+  build_and_deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: npm ci
       - name: Set build env
         run: |
           echo "VITE_APP_VERSION=$(node -p "require('./package.json').version")+$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "VITE_STORAGE_MODE=firebase" >> $GITHUB_ENV
           echo "VITE_SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> $GITHUB_ENV
           echo "VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" >> $GITHUB_ENV
           echo "VITE_R2_WORKER_URL=${{ secrets.R2_WORKER_URL }}" >> $GITHUB_ENV
-      - run: npm run build
+      # build-prod sets VITE_STORAGE_MODE=firebase inline (overrides mise.toml default)
+      - run: mise run build-prod
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
