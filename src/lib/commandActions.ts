@@ -40,6 +40,7 @@ const COMMAND_HELP: Record<string, string> = {
   'add track':'add track [name] — create a new empty track',
   'rm track': 'rm track [id|name] — remove the selected or named track',
   'sel':      'sel <id|name> — select a track by id or name',
+  'rn':       'rn <id|name> "newName" — rename a track',
   'arm':      'arm <id|name> — toggle record-arm on a track',
   'm':        'm [id|name] — toggle mute on track',
   's':        's [id|name] — toggle solo on track',
@@ -513,6 +514,24 @@ export const setMarkerCommand = (indexRaw: string, timeRaw?: string): CommandRes
   return { ok: true, message: `Marker ${index} set to ${seconds.toFixed(2)}s.` };
 };
 
+export const renameTrackByReference = (ref: string, newName: string): CommandResult => {
+  const state = useStore.getState();
+  const target = findTrackByReference(state.tracks, ref);
+  if (!target) {
+    return { ok: false, message: `Track not found: ${ref}` };
+  }
+
+  const trimmed = newName.trim();
+  if (!trimmed) {
+    return { ok: false, message: 'New track name is required.' };
+  }
+
+  const oldName = target.name;
+  const id = localTrackId(state.tracks, target.id);
+  state.updateTrack(target.id, { name: trimmed });
+  return { ok: true, message: `Renamed track "${oldName}" (id: ${id}) to "${trimmed}".` };
+};
+
 export const armTrackCommand = (ref: string): CommandResult => {
   const state = useStore.getState();
   const target = findTrackByReference(state.tracks, ref);
@@ -633,6 +652,11 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
   match = command.match(/^sel\s+(.+)$/i);
   if (match) {
     return selectTrackByReference(match[1]);
+  }
+
+  match = command.match(/^rn\s+(?:"([^"]+)"|(\S+))\s+"([\s\S]+)"\s*$/i);
+  if (match) {
+    return renameTrackByReference(match[1] ?? match[2], match[3]);
   }
 
   match = command.match(/^go\s+(.+)$/i);

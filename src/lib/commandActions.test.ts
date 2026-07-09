@@ -466,6 +466,61 @@ describe('addCommentFromCommand auto track resolution', () => {
     expect(result.message).toBe('No activity yet.');
   });
 
+  it('renames a track by local id via rn command', async () => {
+    const updateTrack = vi.fn();
+    getStateMock.mockReturnValue({
+      tracks: [{ id: 'track-1', name: 'Bass' }],
+      updateTrack,
+    });
+
+    const result = await executeTerminalCommand('rn 1 "Upright Bass"');
+
+    expect(result.ok).toBe(true);
+    expect(updateTrack).toHaveBeenCalledWith('track-1', { name: 'Upright Bass' });
+    expect(result.message).toBe('Renamed track "Bass" (id: 1) to "Upright Bass".');
+  });
+
+  it('renames a track by quoted current name via rn command', async () => {
+    const updateTrack = vi.fn();
+    getStateMock.mockReturnValue({
+      tracks: [{ id: 'track-1', name: 'Old Name' }],
+      updateTrack,
+    });
+
+    const result = await executeTerminalCommand('rn "Old Name" "New Name"');
+
+    expect(result.ok).toBe(true);
+    expect(updateTrack).toHaveBeenCalledWith('track-1', { name: 'New Name' });
+  });
+
+  it('rn reports track not found', async () => {
+    const updateTrack = vi.fn();
+    getStateMock.mockReturnValue({
+      tracks: [{ id: 'track-1', name: 'Bass' }],
+      updateTrack,
+    });
+
+    const result = await executeTerminalCommand('rn Drums "New Name"');
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe('Track not found: Drums');
+    expect(updateTrack).not.toHaveBeenCalled();
+  });
+
+  it('rn rejects a blank new name', async () => {
+    const updateTrack = vi.fn();
+    getStateMock.mockReturnValue({
+      tracks: [{ id: 'track-1', name: 'Bass' }],
+      updateTrack,
+    });
+
+    const result = await executeTerminalCommand('rn 1 "   "');
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe('New track name is required.');
+    expect(updateTrack).not.toHaveBeenCalled();
+  });
+
   it('activity shows recent events in reverse-chronological order', async () => {
     getStateMock.mockReturnValue({
       activityEvents: [

@@ -61,6 +61,43 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
 
   const waveformContainerRef = useRef<HTMLDivElement>(null);
 
+  const [isEditingName, setIsEditingName] = React.useState(false);
+  const [nameDraft, setNameDraft] = React.useState(track.name);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditingName) {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    }
+  }, [isEditingName]);
+
+  const commitNameEdit = () => {
+    const trimmed = nameDraft.trim();
+    if (trimmed && trimmed !== track.name) {
+      updateTrack(track.id, { name: trimmed });
+    }
+    setIsEditingName(false);
+  };
+
+  const handleNameDoubleClick = (e: React.MouseEvent) => {
+    if (!canEdit) return;
+    e.stopPropagation();
+    setNameDraft(track.name);
+    setIsEditingName(true);
+  };
+
+  const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitNameEdit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setNameDraft(track.name);
+      setIsEditingName(false);
+    }
+  };
+
   const trackComments = React.useMemo(() => comments.filter(c => c.trackId === track.id), [comments, track.id]);
 
   const getSnappedTime = (pixels: number) => {
@@ -154,7 +191,26 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
           <div className="flex flex-col overflow-hidden">
             <div className="flex items-center gap-1">
               {track.isFrozen && <Lock size={10} className="text-sky-400 shrink-0" />}
-              <span className="text-xs font-bold text-white truncate">{track.name}</span>
+              {isEditingName ? (
+                <input
+                  ref={nameInputRef}
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onBlur={commitNameEdit}
+                  onKeyDown={handleNameKeyDown}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Rename track ${track.name}`}
+                  className="text-xs font-bold text-white bg-[var(--color-bg-input)] border border-[var(--color-accent)] rounded px-1 -mx-1 w-full outline-none"
+                />
+              ) : (
+                <span
+                  className="text-xs font-bold text-white truncate"
+                  onDoubleClick={handleNameDoubleClick}
+                  title={canEdit ? 'Double-click to rename' : undefined}
+                >
+                  {track.name}
+                </span>
+              )}
             </div>
             <span className="text-[10px] text-[var(--color-text-dark)] font-mono tracking-tight uppercase">Stem {track.id.slice(0, 4)}</span>
           </div>
