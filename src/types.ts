@@ -170,6 +170,7 @@ export interface DAWState {
   syncSong: (projectId: string, songId: string) => () => void;
   updatePresence: (cursorPosition: number) => void;
   pushUpdate: () => Promise<void>;
+  saveNow: () => Promise<void>;
   punchIn: (file: File) => Promise<void>;
   setMarker: (index: 1 | 2, time: number | null) => void;
   setMarkerLabel: (index: 1 | 2, label: string) => void;

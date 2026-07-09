@@ -28,6 +28,14 @@ vi.mock('./exportUtils', () => ({
   exportMixdown: exportMixdownMock,
 }));
 
+const { triggerFileImportMock } = vi.hoisted(() => ({
+  triggerFileImportMock: vi.fn(),
+}));
+
+vi.mock('../hooks/useFileImport', () => ({
+  triggerFileImport: triggerFileImportMock,
+}));
+
 import {
   addCommentFromCommand,
   executeTerminalCommand,
@@ -585,6 +593,289 @@ describe('addCommentFromCommand auto track resolution', () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain('Usage: termopt');
+  });
+
+  it('record starts recording when a track is armed', async () => {
+    const startRecording = vi.fn().mockResolvedValue(undefined);
+    getStateMock.mockReturnValue({
+      isRecording: false,
+      tracks: [{ id: 't1', isArmed: true }],
+      startRecording,
+    });
+
+    const result = await executeTerminalCommand('record');
+
+    expect(result.ok).toBe(true);
+    expect(startRecording).toHaveBeenCalled();
+    expect(result.message).toBe('Recording started.');
+  });
+
+  it('record refuses to start without an armed track', async () => {
+    const startRecording = vi.fn();
+    getStateMock.mockReturnValue({
+      isRecording: false,
+      tracks: [{ id: 't1', isArmed: false }],
+      startRecording,
+    });
+
+    const result = await executeTerminalCommand('record');
+
+    expect(result.ok).toBe(false);
+    expect(startRecording).not.toHaveBeenCalled();
+  });
+
+  it('record stops an in-progress recording', async () => {
+    const stopRecording = vi.fn().mockResolvedValue(undefined);
+    getStateMock.mockReturnValue({
+      isRecording: true,
+      tracks: [],
+      stopRecording,
+    });
+
+    const result = await executeTerminalCommand('record');
+
+    expect(result.ok).toBe(true);
+    expect(stopRecording).toHaveBeenCalled();
+    expect(result.message).toBe('Recording stopped.');
+  });
+
+  it('save persists the current song via saveNow', async () => {
+    const saveNow = vi.fn().mockResolvedValue(undefined);
+    getStateMock.mockReturnValue({
+      currentSongId: 'song-1',
+      currentSongName: 'My Song',
+      saveNow,
+    });
+
+    const result = await executeTerminalCommand('save');
+
+    expect(result.ok).toBe(true);
+    expect(saveNow).toHaveBeenCalled();
+    expect(result.message).toBe('Saved "My Song".');
+  });
+
+  it('save reports an error when no song is loaded', async () => {
+    const saveNow = vi.fn();
+    getStateMock.mockReturnValue({ currentSongId: null, saveNow });
+
+    const result = await executeTerminalCommand('save');
+
+    expect(result.ok).toBe(false);
+    expect(saveNow).not.toHaveBeenCalled();
+  });
+
+  it('save surfaces a save failure', async () => {
+    const saveNow = vi.fn().mockRejectedValue(new Error('offline'));
+    getStateMock.mockReturnValue({ currentSongId: 'song-1', currentSongName: 'X', saveNow });
+
+    const result = await executeTerminalCommand('save');
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe('offline');
+  });
+
+  it('import opens the file picker', async () => {
+    getStateMock.mockReturnValue({});
+    triggerFileImportMock.mockClear();
+
+    const result = await executeTerminalCommand('import');
+
+    expect(result.ok).toBe(true);
+    expect(triggerFileImportMock).toHaveBeenCalled();
+  });
+
+  it('tool switches the active editing tool', async () => {
+    const setTool = vi.fn();
+    getStateMock.mockReturnValue({ setTool });
+
+    const result = await executeTerminalCommand('tool scissors');
+
+    expect(result.ok).toBe(true);
+    expect(setTool).toHaveBeenCalledWith('scissors');
+  });
+
+  it('tool rejects an unknown tool name', async () => {
+    const setTool = vi.fn();
+    getStateMock.mockReturnValue({ setTool });
+
+    const result = await executeTerminalCommand('tool laser');
+
+    expect(result.ok).toBe(false);
+    expect(setTool).not.toHaveBeenCalled();
+  });
+
+  it('snap toggles snap-to-grid', async () => {
+    const setSnapEnabled = vi.fn();
+    getStateMock.mockReturnValue({ snapEnabled: false, setSnapEnabled });
+
+    const result = await executeTerminalCommand('snap');
+
+    expect(result.ok).toBe(true);
+    expect(setSnapEnabled).toHaveBeenCalledWith(true);
+  });
+
+  it('follow toggles follow-playhead', async () => {
+    const setFollowPlayhead = vi.fn();
+    getStateMock.mockReturnValue({ followPlayhead: true, setFollowPlayhead });
+
+    const result = await executeTerminalCommand('follow');
+
+    expect(result.ok).toBe(true);
+    expect(setFollowPlayhead).toHaveBeenCalledWith(false);
+  });
+
+  it('mixer toggles the mixer panel', async () => {
+    const setShowMixer = vi.fn();
+    getStateMock.mockReturnValue({ showMixer: false, setShowMixer });
+
+    const result = await executeTerminalCommand('mixer');
+
+    expect(result.ok).toBe(true);
+    expect(setShowMixer).toHaveBeenCalledWith(true);
+  });
+
+  it('tempo sheet toggles the tempo sheet panel', async () => {
+    const setShowTempoSheet = vi.fn();
+    getStateMock.mockReturnValue({ showTempoSheet: false, setShowTempoSheet });
+
+    const result = await executeTerminalCommand('tempo sheet');
+
+    expect(result.ok).toBe(true);
+    expect(setShowTempoSheet).toHaveBeenCalledWith(true);
+  });
+
+  it('tempo <bpm> still works after adding tempo sheet special-case', async () => {
+    const setTempo = vi.fn();
+    getStateMock.mockReturnValue({ setTempo, tempo: 140 });
+
+    const result = await executeTerminalCommand('tempo 140');
+
+    expect(result.ok).toBe(true);
+    expect(setTempo).toHaveBeenCalledWith(140);
+  });
+
+  it('timeline switches the ruler display mode', async () => {
+    const setTimelineMode = vi.fn();
+    getStateMock.mockReturnValue({ setTimelineMode });
+
+    const result = await executeTerminalCommand('timeline beats');
+
+    expect(result.ok).toBe(true);
+    expect(setTimelineMode).toHaveBeenCalledWith('beats');
+  });
+
+  it('timeline rejects an unknown mode', async () => {
+    const setTimelineMode = vi.fn();
+    getStateMock.mockReturnValue({ setTimelineMode });
+
+    const result = await executeTerminalCommand('timeline grid');
+
+    expect(result.ok).toBe(false);
+    expect(setTimelineMode).not.toHaveBeenCalled();
+  });
+
+  it('go start jumps the playhead to 0', async () => {
+    const goToStart = vi.fn();
+    getStateMock.mockReturnValue({ goToStart, currentTime: 0 });
+
+    const result = await executeTerminalCommand('go start');
+
+    expect(result.ok).toBe(true);
+    expect(goToStart).toHaveBeenCalled();
+  });
+
+  it('go end jumps the playhead to the project end', async () => {
+    const goToEnd = vi.fn();
+    getStateMock.mockReturnValue({ goToEnd, currentTime: 42 });
+
+    const result = await executeTerminalCommand('go end');
+
+    expect(result.ok).toBe(true);
+    expect(goToEnd).toHaveBeenCalled();
+    expect(result.message).toContain('42.00s');
+  });
+
+  it('go <time> still works after adding go start/end special-cases', async () => {
+    const setCurrentTime = vi.fn();
+    getStateMock.mockReturnValue({ setCurrentTime, tempo: 120 });
+
+    const result = await executeTerminalCommand('go 30');
+
+    expect(result.ok).toBe(true);
+    expect(setCurrentTime).toHaveBeenCalledWith(30);
+  });
+
+  it('resolve toggles a comment to approved', async () => {
+    const toggleResolveComment = vi.fn();
+    getStateMock.mockReturnValue({
+      comments: [{ id: '1', status: 'open' }],
+      toggleResolveComment,
+    });
+
+    const result = await executeTerminalCommand('resolve 1');
+
+    expect(result.ok).toBe(true);
+    expect(toggleResolveComment).toHaveBeenCalledWith('1');
+    expect(result.message).toBe('Comment #1 resolved.');
+  });
+
+  it('resolve toggles an approved comment back to open', async () => {
+    const toggleResolveComment = vi.fn();
+    getStateMock.mockReturnValue({
+      comments: [{ id: '1', status: 'approved' }],
+      toggleResolveComment,
+    });
+
+    const result = await executeTerminalCommand('resolve 1');
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe('Comment #1 reopened.');
+  });
+
+  it('resolve reports comment not found', async () => {
+    const toggleResolveComment = vi.fn();
+    getStateMock.mockReturnValue({ comments: [], toggleResolveComment });
+
+    const result = await executeTerminalCommand('resolve 99');
+
+    expect(result.ok).toBe(false);
+    expect(toggleResolveComment).not.toHaveBeenCalled();
+  });
+
+  it('marker label sets a label on an existing marker', async () => {
+    const setMarkerLabel = vi.fn();
+    getStateMock.mockReturnValue({
+      markers: { 1: 10, 2: null },
+      setMarkerLabel,
+    });
+
+    const result = await executeTerminalCommand('marker 1 label "Chorus"');
+
+    expect(result.ok).toBe(true);
+    expect(setMarkerLabel).toHaveBeenCalledWith(1, 'Chorus');
+  });
+
+  it('marker label refuses to label an unset marker', async () => {
+    const setMarkerLabel = vi.fn();
+    getStateMock.mockReturnValue({
+      markers: { 1: null, 2: null },
+      setMarkerLabel,
+    });
+
+    const result = await executeTerminalCommand('marker 1 label "Chorus"');
+
+    expect(result.ok).toBe(false);
+    expect(setMarkerLabel).not.toHaveBeenCalled();
+  });
+
+  it('marker <n> <time> still works after adding the label special-case', async () => {
+    const setMarker = vi.fn();
+    getStateMock.mockReturnValue({ setMarker, tempo: 120 });
+
+    const result = await executeTerminalCommand('marker 1 5');
+
+    expect(result.ok).toBe(true);
+    expect(setMarker).toHaveBeenCalledWith(1, 5);
   });
 
   it('activity returns "No activity yet" when log is empty', async () => {

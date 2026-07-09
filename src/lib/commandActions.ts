@@ -7,6 +7,7 @@ import { clamp } from './clamp';
 import { getClipEnd } from './clipUtils';
 import { parseAbsolutePositionToken, parseRelativeToken } from './positionParser';
 import { expandAliases, setRcAlias, removeRcAlias } from './aliases';
+import { triggerFileImport } from '../hooks/useFileImport';
 
 let _punchInTrigger: (() => void) | null = null;
 
@@ -32,8 +33,9 @@ const COMMAND_HELP: Record<string, string> = {
   'play':     'play — start playback from current position',
   'pause':    'pause — pause playback',
   'stop':     'stop — stop and return playhead to 0',
+  'record':   'record — toggle recording (requires an armed track to start)',
   // Navigation
-  'go':       'go <time> — seek to position (seconds, mm:ss, bar.beat)',
+  'go':       'go <time|start|end> — seek to position (seconds, mm:ss, bar.beat, or start/end)',
   'ff':       'ff [n] — fast-forward by n seconds (default 5)',
   'rw':       'rw [n] — rewind by n seconds (default 5)',
   // Tracks
@@ -44,8 +46,10 @@ const COMMAND_HELP: Record<string, string> = {
   'arm':      'arm <id|name> — toggle record-arm on a track',
   'm':        'm [id|name] — toggle mute on track',
   's':        's [id|name] — toggle solo on track',
-  'vu':       'vu [ref] [n] — raise track volume (default 0.1)',
-  'vd':       'vd [ref] [n] — lower track volume (default 0.1)',
+  'vu':       'vu [ref] [n] — raise track volume (default 0.1); alias: volup',
+  'vd':       'vd [ref] [n] — lower track volume (default 0.1); alias: voldown',
+  'volup':    'volup [ref] [n] — alias for vu',
+  'voldown':  'voldown [ref] [n] — alias for vd',
   'freeze':   'freeze <id|name> — freeze track (owner only)',
   'unfreeze': 'unfreeze <id|name> — unfreeze track (owner only)',
   // Terminal window
@@ -54,15 +58,25 @@ const COMMAND_HELP: Record<string, string> = {
   'termopt pos':   'termopt pos <top%> <left%> — move terminal (% of viewport from top/left)',
   'termopt size':  'termopt size <width%> <height%> — resize terminal (% of viewport; floors at default size)',
   // Session
-  'tempo':    'tempo <bpm> — set tempo (20–300)',
-  'marker':   'marker <1|2> [time] — set (or clear with no time) a marker',
-  'undo':     'undo — undo last action',
-  'redo':     'redo — redo last undone action',
+  'save':        'save — save the current song now',
+  'import':      'import — open file picker to import audio stems',
+  'tempo':       'tempo <bpm> — set tempo (20–300)',
+  'tempo sheet': 'tempo sheet — toggle the variable-tempo sheet panel',
+  'marker':       'marker <1|2> [time] — set (or clear with no time) a marker',
+  'marker label': 'marker <1|2> label "text" — rename a marker',
+  'undo':        'undo — undo last action',
+  'redo':        'redo — redo last undone action',
+  'tool':        'tool <select|scissors|mute> — switch the active editing tool',
+  'snap':        'snap — toggle snap-to-grid',
+  'follow':      'follow — toggle follow-playhead',
+  'mixer':       'mixer — toggle the mixer panel',
+  'timeline':    'timeline <time|beats> — switch timeline ruler display mode',
   // Comments
   'c:':       'c: "text" — add comment at playhead on selected/auto track',
   'c <ref>:': 'c <ref>: "text" — add comment on a specific track',
   'rm c':     'rm c <id> — remove comment by id',
   'reply':    'reply <id> "text" — add a threaded reply to comment #id',
+  'resolve':  'resolve <id> — toggle a comment between resolved and open',
   'unread':   'unread — list unread open comments',
   // Collaboration
   'invite':   'invite <email> [role] — invite collaborator (role: editor|viewer)',
@@ -71,8 +85,10 @@ const COMMAND_HELP: Record<string, string> = {
   'e stem':   'e stem [id|name] — export a single track stem; no arg = between markers',
   'punchin':  'punchin — open file picker to punch in audio at playhead',
   // View / tools
-  'spectrum': 'spectrum — toggle spectrum analyser panel',
-  'click':    'click — toggle metronome/click track',
+  'spectrum': 'spectrum — toggle spectrum analyser panel; alias: spec',
+  'spec':     'spec — alias for spectrum',
+  'click':    'click — toggle metronome/click track; alias: metronome',
+  'metronome':'metronome — alias for click',
   'activity': 'activity [n] — show last n activity events (default 10)',
   'compat':   'compat — check browser API compatibility',
   '+':        '+ / ++ / +++ — zoom in 1/2/3 steps',
@@ -477,6 +493,118 @@ export const stopCommand = (): CommandResult => {
   return { ok: true, message: 'Stopped.' };
 };
 
+export const toggleRecordingCommand = async (): Promise<CommandResult> => {
+  const state = useStore.getState();
+  if (state.isRecording) {
+    await state.stopRecording();
+    return { ok: true, message: 'Recording stopped.' };
+  }
+  if (!state.tracks.some(t => t.isArmed)) {
+    return { ok: false, message: 'Arm a track before recording.' };
+  }
+  await state.startRecording();
+  return { ok: true, message: 'Recording started.' };
+};
+
+export const quickSaveCommand = async (): Promise<CommandResult> => {
+  const state = useStore.getState();
+  if (!state.currentSongId) {
+    return { ok: false, message: 'No song loaded to save.' };
+  }
+  try {
+    await state.saveNow();
+    return { ok: true, message: `Saved "${state.currentSongName || 'song'}".` };
+  } catch (err: any) {
+    return { ok: false, message: err?.message || 'Save failed.' };
+  }
+};
+
+export const importStemsCommand = (): CommandResult => {
+  triggerFileImport();
+  return { ok: true, message: 'Opening file picker to import stems...' };
+};
+
+export const setToolCommand = (raw: string): CommandResult => {
+  const tool = raw.trim().toLowerCase();
+  if (tool !== 'select' && tool !== 'scissors' && tool !== 'mute') {
+    return { ok: false, message: 'Usage: tool <select|scissors|mute>' };
+  }
+  useStore.getState().setTool(tool);
+  return { ok: true, message: `Tool set to ${tool}.` };
+};
+
+export const toggleSnapCommand = (): CommandResult => {
+  const state = useStore.getState();
+  const next = !state.snapEnabled;
+  state.setSnapEnabled(next);
+  return { ok: true, message: `Snap to grid ${next ? 'enabled' : 'disabled'}.` };
+};
+
+export const toggleFollowPlayheadCommand = (): CommandResult => {
+  const state = useStore.getState();
+  const next = !state.followPlayhead;
+  state.setFollowPlayhead(next);
+  return { ok: true, message: `Follow playhead ${next ? 'enabled' : 'disabled'}.` };
+};
+
+export const toggleMixerCommand = (): CommandResult => {
+  const state = useStore.getState();
+  const next = !state.showMixer;
+  state.setShowMixer(next);
+  return { ok: true, message: `Mixer ${next ? 'opened' : 'closed'}.` };
+};
+
+export const toggleTempoSheetCommand = (): CommandResult => {
+  const state = useStore.getState();
+  const next = !state.showTempoSheet;
+  state.setShowTempoSheet(next);
+  return { ok: true, message: `Tempo sheet ${next ? 'opened' : 'closed'}.` };
+};
+
+export const setTimelineModeCommand = (raw: string): CommandResult => {
+  const mode = raw.trim().toLowerCase();
+  if (mode !== 'time' && mode !== 'beats') {
+    return { ok: false, message: 'Usage: timeline <time|beats>' };
+  }
+  useStore.getState().setTimelineMode(mode);
+  return { ok: true, message: `Timeline mode set to ${mode}.` };
+};
+
+export const goToEdgeCommand = (edge: 'start' | 'end'): CommandResult => {
+  const state = useStore.getState();
+  if (edge === 'start') {
+    state.goToStart();
+    return { ok: true, message: 'Playhead set to start (0s).' };
+  }
+  state.goToEnd();
+  return { ok: true, message: `Playhead set to end (${state.currentTime.toFixed(2)}s).` };
+};
+
+export const resolveCommentCommand = (commentId: string): CommandResult => {
+  const state = useStore.getState();
+  const normalized = (commentId || '').trim().replace(/^#/, '');
+  const target = state.comments.find(comment => comment.id === normalized);
+  if (!target) {
+    return { ok: false, message: `Comment not found: ${normalized}` };
+  }
+  state.toggleResolveComment(normalized);
+  const nowApproved = target.status !== 'approved';
+  return { ok: true, message: `Comment #${normalized} ${nowApproved ? 'resolved' : 'reopened'}.` };
+};
+
+export const setMarkerLabelCommand = (indexRaw: string, label: string): CommandResult => {
+  const index = Number(indexRaw) as 1 | 2;
+  if (index !== 1 && index !== 2) {
+    return { ok: false, message: 'Marker index must be 1 or 2.' };
+  }
+  const state = useStore.getState();
+  if (state.markers[index] === null) {
+    return { ok: false, message: `Marker ${index} is not set yet.` };
+  }
+  state.setMarkerLabel(index, label.trim());
+  return { ok: true, message: `Marker ${index} label set to "${label.trim()}".` };
+};
+
 export const setTempoCommand = (raw: string): CommandResult => {
   const bpm = Number(raw.trim());
   if (!Number.isFinite(bpm) || bpm <= 0) {
@@ -711,6 +839,11 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
   if (/^play$/i.test(command)) return playCommand();
   if (/^pause$/i.test(command)) return pauseCommand();
   if (/^stop$/i.test(command)) return stopCommand();
+  if (/^record$/i.test(command)) return toggleRecordingCommand();
+  if (/^save$/i.test(command)) return quickSaveCommand();
+  if (/^import$/i.test(command)) return importStemsCommand();
+
+  if (/^tempo\s+sheet$/i.test(command)) return toggleTempoSheetCommand();
 
   let match = command.match(/^tempo\s+(.+)$/i);
   if (match) return setTempoCommand(match[1]);
@@ -718,8 +851,24 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
   if (/^undo$/i.test(command)) return undoCommand();
   if (/^redo$/i.test(command)) return redoCommand();
 
+  match = command.match(/^marker\s+([12])\s+label\s+"([\s\S]+)"\s*$/i);
+  if (match) return setMarkerLabelCommand(match[1], match[2]);
+
   match = command.match(/^marker\s+([12])(?:\s+(.+))?$/i);
   if (match) return setMarkerCommand(match[1], match[2]);
+
+  match = command.match(/^tool\s+(.+)$/i);
+  if (match) return setToolCommand(match[1]);
+
+  if (/^snap$/i.test(command)) return toggleSnapCommand();
+  if (/^follow$/i.test(command)) return toggleFollowPlayheadCommand();
+  if (/^mixer$/i.test(command)) return toggleMixerCommand();
+
+  match = command.match(/^timeline\s+(.+)$/i);
+  if (match) return setTimelineModeCommand(match[1]);
+
+  match = command.match(/^resolve\s+(.+)$/i);
+  if (match) return resolveCommentCommand(match[1]);
 
   match = command.match(/^arm\s+(.+)$/i);
   if (match) return armTrackCommand(match[1]);
@@ -748,6 +897,14 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
   match = command.match(/^rn\s+(?:"([^"]+)"|(\S+))\s+"([\s\S]+)"\s*$/i);
   if (match) {
     return renameTrackByReference(match[1] ?? match[2], match[3]);
+  }
+
+  if (/^go\s+start$/i.test(command)) {
+    return goToEdgeCommand('start');
+  }
+
+  if (/^go\s+end$/i.test(command)) {
+    return goToEdgeCommand('end');
   }
 
   match = command.match(/^go\s+(.+)$/i);

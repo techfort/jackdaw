@@ -23,7 +23,7 @@ import { useFileImport } from '../hooks/useFileImport';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ProjectMenu } from './ProjectMenu';
 import { AnimatePresence } from 'motion/react';
-import { authService, storageMode, storageService } from '../services/storage';
+import { authService, storageMode } from '../services/storage';
 import { registerPunchInTrigger } from '../lib/commandActions';
 import { InputDeviceSelector } from './InputDeviceSelector';
 
@@ -95,6 +95,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
   const currentSongId = useStore(state => state.currentSongId);
   const currentSongName = useStore(state => state.currentSongName);
   const clearSong = useStore(state => state.clearSong);
+  const saveNow = useStore(state => state.saveNow);
   const undo = useStore(state => state.undo);
   const redo = useStore(state => state.redo);
   const canUndo = useStore(state => state.canUndo);
@@ -153,26 +154,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onToggleCollaboration, isColla
     }
 
     setIsSaving(true);
-    const projectId = currentProjectId || 'local';
-
     try {
-      await storageService.saveSong(projectId, currentSongId, {
-        name: currentSongName,
-        tempo,
-        comments,
-        tracks: tracks.map(({ ...rest }) => ({
-          ...rest,
-          clips: (rest.clips || []).map(({ buffer: _buf, ...c }) => c)
-        })) as any,
-        updatedAt: Date.now(),
-        projectId
-      } as any);
+      await saveNow();
     } catch (e) {
       console.error(e);
     } finally {
       setIsSaving(false);
     }
-  }, [currentProjectId, currentSongId, currentSongName, tempo, comments, tracks]);
+  }, [currentSongId, saveNow]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

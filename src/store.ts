@@ -461,6 +461,24 @@ export const useStore = create<DAWState>((set, get) => {
       }
     },
 
+    saveNow: async () => {
+      const { currentProjectId, currentSongId, currentSongName, tempo, tempoEvents, comments, tracks } = get();
+      if (!currentSongId) throw new Error('No song loaded to save.');
+      const projectId = currentProjectId || 'local';
+      await (storageService as any).saveSong(projectId, currentSongId, {
+        name: currentSongName,
+        tempo,
+        tempoEvents,
+        comments,
+        tracks: tracks.map((track) => ({
+          ...track,
+          clips: (track.clips || []).map(serializeClip),
+        })),
+        updatedAt: Date.now(),
+        projectId,
+      });
+    },
+
     punchIn: async (file) => {
       const { currentTime, tracks, pushUpdate } = get();
       
