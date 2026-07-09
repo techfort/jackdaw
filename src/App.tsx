@@ -390,7 +390,7 @@ export default function App() {
       />
       {showTempoSheet && <TempoSheet />}
 
-      <div className="flex-1 flex overflow-hidden relative">
+      <div id="jackdaw-daw-area" className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 flex flex-col overflow-hidden relative">
           <div 
             ref={viewportRef}

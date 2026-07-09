@@ -119,6 +119,8 @@ export interface DAWState {
   showMixer: boolean;
   isSpectrumOpen: boolean;
   isClickEnabled: boolean;
+  terminalPos: { top: number; left: number } | null; // % of viewport; null = default anchor
+  terminalSize: { width: number; height: number } | null; // % of viewport; null = default size
   isOnline: boolean;
   pendingWriteCount: number;
   availableInputDevices: MediaDeviceInfo[];
@@ -142,6 +144,8 @@ export interface DAWState {
   setConfigEditorOpen: (open: boolean) => void;
   setSpectrumOpen: (open: boolean) => void;
   setClickEnabled: (enabled: boolean) => void;
+  setTerminalPos: (pos: { top: number; left: number } | null) => void;
+  setTerminalSize: (size: { width: number; height: number } | null) => void;
   setOnline: (online: boolean) => void;
   setAvailableInputDevices: (devices: MediaDeviceInfo[]) => void;
   setSelectedInputDeviceId: (deviceId: string | null) => void;

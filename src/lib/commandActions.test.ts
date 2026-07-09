@@ -28,7 +28,17 @@ vi.mock('./exportUtils', () => ({
   exportMixdown: exportMixdownMock,
 }));
 
-import { addCommentFromCommand, executeTerminalCommand } from './commandActions';
+import {
+  addCommentFromCommand,
+  executeTerminalCommand,
+  DEFAULT_TERMINAL_WIDTH_PX,
+  DEFAULT_TERMINAL_HEIGHT_PX,
+} from './commandActions';
+
+const setViewport = (width: number, height: number) => {
+  Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
+  Object.defineProperty(window, 'innerHeight', { value: height, configurable: true });
+};
 
 describe('addCommentFromCommand auto track resolution', () => {
   beforeEach(() => {
@@ -457,6 +467,124 @@ describe('addCommentFromCommand auto track resolution', () => {
     expect(result.message).toContain('#1');
     expect(result.message).toContain('#3');
     expect(result.message).not.toContain('#2');
+  });
+
+  it('termopt reset clears custom position and size', async () => {
+    const setTerminalPos = vi.fn();
+    const setTerminalSize = vi.fn();
+    getStateMock.mockReturnValue({ setTerminalPos, setTerminalSize });
+
+    const result = await executeTerminalCommand('termopt reset');
+
+    expect(result.ok).toBe(true);
+    expect(setTerminalPos).toHaveBeenCalledWith(null);
+    expect(setTerminalSize).toHaveBeenCalledWith(null);
+  });
+
+  it('termopt size sets a valid width/height', async () => {
+    setViewport(2000, 2000);
+    const setTerminalSize = vi.fn();
+    getStateMock.mockReturnValue({ terminalPos: null, setTerminalSize, setTerminalPos: vi.fn() });
+
+    const result = await executeTerminalCommand('termopt size 40 50');
+
+    expect(result.ok).toBe(true);
+    expect(setTerminalSize).toHaveBeenCalledWith({ width: 40, height: 50 });
+    expect(result.message).toBe('Terminal size set to 40.0% x 50.0% of viewport.');
+  });
+
+  it('termopt size floors below the default terminal dimensions', async () => {
+    setViewport(1000, 1000);
+    const setTerminalSize = vi.fn();
+    getStateMock.mockReturnValue({ terminalPos: null, setTerminalSize, setTerminalPos: vi.fn() });
+
+    const result = await executeTerminalCommand('termopt size 1 1');
+
+    const expectedMinWidth = (DEFAULT_TERMINAL_WIDTH_PX / 1000) * 100;
+    const expectedMinHeight = (DEFAULT_TERMINAL_HEIGHT_PX / 1000) * 100;
+    expect(result.ok).toBe(true);
+    expect(setTerminalSize).toHaveBeenCalledWith({ width: expectedMinWidth, height: expectedMinHeight });
+  });
+
+  it('termopt size caps at the max layout percentage', async () => {
+    setViewport(1000, 1000);
+    const setTerminalSize = vi.fn();
+    getStateMock.mockReturnValue({ terminalPos: null, setTerminalSize, setTerminalPos: vi.fn() });
+
+    const result = await executeTerminalCommand('termopt size 500 500');
+
+    expect(result.ok).toBe(true);
+    expect(setTerminalSize).toHaveBeenCalledWith({ width: 95, height: 95 });
+  });
+
+  it('termopt size re-clamps an existing custom position to stay on screen', async () => {
+    setViewport(1000, 1000);
+    const setTerminalSize = vi.fn();
+    const setTerminalPos = vi.fn();
+    getStateMock.mockReturnValue({
+      terminalPos: { top: 80, left: 80 },
+      setTerminalSize,
+      setTerminalPos,
+    });
+
+    const result = await executeTerminalCommand('termopt size 60 60');
+
+    expect(result.ok).toBe(true);
+    expect(setTerminalSize).toHaveBeenCalledWith({ width: 60, height: 60 });
+    expect(setTerminalPos).toHaveBeenCalledWith({ top: 35, left: 35 });
+  });
+
+  it('termopt size rejects non-numeric input', async () => {
+    const setTerminalSize = vi.fn();
+    getStateMock.mockReturnValue({ terminalPos: null, setTerminalSize, setTerminalPos: vi.fn() });
+
+    const result = await executeTerminalCommand('termopt size abc 50');
+
+    expect(result.ok).toBe(false);
+    expect(setTerminalSize).not.toHaveBeenCalled();
+  });
+
+  it('termopt pos sets a valid position', async () => {
+    setViewport(1000, 1000);
+    const setTerminalPos = vi.fn();
+    getStateMock.mockReturnValue({ terminalSize: { width: 40, height: 50 }, setTerminalPos });
+
+    const result = await executeTerminalCommand('termopt pos 10 10');
+
+    expect(result.ok).toBe(true);
+    expect(setTerminalPos).toHaveBeenCalledWith({ top: 10, left: 10 });
+    expect(result.message).toBe('Terminal position set to 10.0% from top, 10.0% from left.');
+  });
+
+  it('termopt pos clamps to keep the window fully on screen given the current size', async () => {
+    setViewport(1000, 1000);
+    const setTerminalPos = vi.fn();
+    getStateMock.mockReturnValue({ terminalSize: { width: 40, height: 50 }, setTerminalPos });
+
+    const result = await executeTerminalCommand('termopt pos 90 90');
+
+    expect(result.ok).toBe(true);
+    // max top = 95 - 50 (height) = 45; max left = 95 - 40 (width) = 55
+    expect(setTerminalPos).toHaveBeenCalledWith({ top: 45, left: 55 });
+  });
+
+  it('termopt pos rejects non-numeric input', async () => {
+    const setTerminalPos = vi.fn();
+    getStateMock.mockReturnValue({ terminalSize: null, setTerminalPos });
+
+    const result = await executeTerminalCommand('termopt pos x y');
+
+    expect(result.ok).toBe(false);
+    expect(setTerminalPos).not.toHaveBeenCalled();
+  });
+
+  it('bare termopt reports usage', async () => {
+    getStateMock.mockReturnValue({});
+
+    const result = await executeTerminalCommand('termopt');
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('Usage: termopt');
   });
 
   it('activity returns "No activity yet" when log is empty', async () => {

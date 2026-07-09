@@ -1,5 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { executeTerminalCommand, COMMAND_NAMES } from '../lib/commandActions';
+import {
+  executeTerminalCommand,
+  COMMAND_NAMES,
+  DEFAULT_TERMINAL_WIDTH_PX,
+  DEFAULT_TERMINAL_HEIGHT_PX,
+} from '../lib/commandActions';
 import { useStore } from '../store';
 
 type TerminalLine = {
@@ -21,6 +26,8 @@ export const CommandTerminal: React.FC = () => {
   const saveRcText = useStore(state => state.saveRcText);
   const isConfigEditorOpen = useStore(state => state.isConfigEditorOpen);
   const setConfigEditorOpen = useStore(state => state.setConfigEditorOpen);
+  const terminalPos = useStore(state => state.terminalPos);
+  const terminalSize = useStore(state => state.terminalSize);
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -91,6 +98,10 @@ export const CommandTerminal: React.FC = () => {
     'alias n = command   define an alias (e.g. alias rec = arm sel)',
     'unalias <name>      remove an alias',
     'config / rc         open the .jackdawrc config editor',
+    '── Terminal window ───────────────────────────────────',
+    'termopt reset       reset terminal to default size/position',
+    'termopt pos x y     move terminal (x% from top, y% from left)',
+    'termopt size x y    resize terminal (x% wide, y% tall; floors at default)',
   ];
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -188,8 +199,28 @@ export const CommandTerminal: React.FC = () => {
     setInput(historyDraft);
   };
 
+  // Percentages here resolve against #jackdaw-daw-area (this wrapper's containing block) —
+  // matching how termopt's pos/size clamping in commandActions.ts measures that same element.
+  const wrapperStyle: React.CSSProperties = {
+    ...(terminalPos ? { top: `${terminalPos.top}%`, left: `${terminalPos.left}%` } : {}),
+    ...(terminalSize
+      ? {
+          width: `${terminalSize.width}%`,
+          height: `${terminalSize.height}%`,
+          minWidth: DEFAULT_TERMINAL_WIDTH_PX,
+          minHeight: DEFAULT_TERMINAL_HEIGHT_PX,
+        }
+      : {}),
+  };
+  const wrapperClassName = terminalPos
+    ? 'absolute z-[110]'
+    : 'absolute bottom-2 right-4 z-[110]';
+  const boxClassName = terminalSize
+    ? 'w-full h-full rounded border border-[var(--color-border-main)] bg-[var(--color-bg-sidebar)] shadow-2xl flex flex-col overflow-hidden'
+    : 'w-[420px] h-56 rounded border border-[var(--color-border-main)] bg-[var(--color-bg-sidebar)] shadow-2xl flex flex-col overflow-hidden';
+
   return (
-    <div className="absolute bottom-2 right-4 z-[110]">
+    <div className={wrapperClassName} style={wrapperStyle}>
       {!isOpen ? (
         <button
           onClick={() => {
@@ -202,7 +233,7 @@ export const CommandTerminal: React.FC = () => {
           🎵 Terminal
         </button>
       ) : (
-        <div className="w-[420px] h-56 rounded border border-[var(--color-border-main)] bg-[var(--color-bg-sidebar)] shadow-2xl flex flex-col overflow-hidden">
+        <div className={boxClassName}>
           <div className="h-7 px-2 border-b border-[var(--color-border-main)] bg-black/20 flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-muted)]">JackDAW Terminal</span>

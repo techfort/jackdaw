@@ -48,6 +48,11 @@ const COMMAND_HELP: Record<string, string> = {
   'vd':       'vd [ref] [n] — lower track volume (default 0.1)',
   'freeze':   'freeze <id|name> — freeze track (owner only)',
   'unfreeze': 'unfreeze <id|name> — unfreeze track (owner only)',
+  // Terminal window
+  'termopt':       'termopt <reset|pos x y|size x y> — control the terminal window',
+  'termopt reset': 'termopt reset — reset terminal window to default size/position',
+  'termopt pos':   'termopt pos <top%> <left%> — move terminal (% of viewport from top/left)',
+  'termopt size':  'termopt size <width%> <height%> — resize terminal (% of viewport; floors at default size)',
   // Session
   'tempo':    'tempo <bpm> — set tempo (20–300)',
   'marker':   'marker <1|2> [time] — set (or clear with no time) a marker',
@@ -532,6 +537,92 @@ export const renameTrackByReference = (ref: string, newName: string): CommandRes
   return { ok: true, message: `Renamed track "${oldName}" (id: ${id}) to "${trimmed}".` };
 };
 
+export const DEFAULT_TERMINAL_WIDTH_PX = 420;
+export const DEFAULT_TERMINAL_HEIGHT_PX = 224;
+
+// The terminal is positioned/sized as a percentage of the DAW content area (#jackdaw-daw-area),
+// not the raw browser viewport — that area is what actually clips it (overflow-hidden), and it
+// sits between the toolbar and the cheat-sheet/footer bars. Measuring it directly (rather than
+// window.innerWidth/innerHeight) keeps pos/size percentages accurate to what will actually fit
+// without the top bar or input line ever being clipped by that surrounding chrome.
+const MAX_TERMINAL_LAYOUT_PCT = 95;
+
+const getViewportSize = (): { width: number; height: number } => {
+  const area = typeof document !== 'undefined' ? document.getElementById('jackdaw-daw-area') : null;
+  if (area) {
+    const rect = area.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      return { width: rect.width, height: rect.height };
+    }
+  }
+  return {
+    width: typeof window !== 'undefined' ? window.innerWidth : 1280,
+    height: typeof window !== 'undefined' ? window.innerHeight : 800,
+  };
+};
+
+export const termOptReset = (): CommandResult => {
+  const state = useStore.getState();
+  state.setTerminalPos(null);
+  state.setTerminalSize(null);
+  return { ok: true, message: 'Terminal reset to default size and position.' };
+};
+
+export const termOptSize = (widthRaw: string, heightRaw: string): CommandResult => {
+  const width = Number(widthRaw);
+  const height = Number(heightRaw);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return { ok: false, message: 'Usage: termopt size <width%> <height%> — both must be positive numbers.' };
+  }
+
+  const { width: vw, height: vh } = getViewportSize();
+  const minWidthPct = (DEFAULT_TERMINAL_WIDTH_PX / vw) * 100;
+  const minHeightPct = (DEFAULT_TERMINAL_HEIGHT_PX / vh) * 100;
+  const clampedWidth = clamp(width, minWidthPct, MAX_TERMINAL_LAYOUT_PCT);
+  const clampedHeight = clamp(height, minHeightPct, MAX_TERMINAL_LAYOUT_PCT);
+
+  const state = useStore.getState();
+  state.setTerminalSize({ width: clampedWidth, height: clampedHeight });
+
+  // Re-clamp any existing custom position so the window stays fully on screen at the new size.
+  const pos = state.terminalPos;
+  if (pos) {
+    state.setTerminalPos({
+      top: clamp(pos.top, 0, Math.max(0, MAX_TERMINAL_LAYOUT_PCT - clampedHeight)),
+      left: clamp(pos.left, 0, Math.max(0, MAX_TERMINAL_LAYOUT_PCT - clampedWidth)),
+    });
+  }
+
+  return {
+    ok: true,
+    message: `Terminal size set to ${clampedWidth.toFixed(1)}% x ${clampedHeight.toFixed(1)}% of viewport.`
+  };
+};
+
+export const termOptPos = (topRaw: string, leftRaw: string): CommandResult => {
+  const top = Number(topRaw);
+  const left = Number(leftRaw);
+  if (!Number.isFinite(top) || !Number.isFinite(left)) {
+    return { ok: false, message: 'Usage: termopt pos <top%> <left%> — both must be numbers.' };
+  }
+
+  const state = useStore.getState();
+  const { width: vw, height: vh } = getViewportSize();
+  const minWidthPct = (DEFAULT_TERMINAL_WIDTH_PX / vw) * 100;
+  const minHeightPct = (DEFAULT_TERMINAL_HEIGHT_PX / vh) * 100;
+  const currentWidth = state.terminalSize?.width ?? minWidthPct;
+  const currentHeight = state.terminalSize?.height ?? minHeightPct;
+
+  const clampedTop = clamp(top, 0, Math.max(0, MAX_TERMINAL_LAYOUT_PCT - currentHeight));
+  const clampedLeft = clamp(left, 0, Math.max(0, MAX_TERMINAL_LAYOUT_PCT - currentWidth));
+  state.setTerminalPos({ top: clampedTop, left: clampedLeft });
+
+  return {
+    ok: true,
+    message: `Terminal position set to ${clampedTop.toFixed(1)}% from top, ${clampedLeft.toFixed(1)}% from left.`
+  };
+};
+
 export const armTrackCommand = (ref: string): CommandResult => {
   const state = useStore.getState();
   const target = findTrackByReference(state.tracks, ref);
@@ -793,6 +884,24 @@ export const executeTerminalCommand = async (raw: string): Promise<CommandResult
   match = command.match(/^unfreeze\s+(.+)$/i);
   if (match) {
     return unfreezeTrack(match[1]);
+  }
+
+  if (/^termopt\s+reset$/i.test(command)) {
+    return termOptReset();
+  }
+
+  match = command.match(/^termopt\s+pos\s+(\S+)\s+(\S+)$/i);
+  if (match) {
+    return termOptPos(match[1], match[2]);
+  }
+
+  match = command.match(/^termopt\s+size\s+(\S+)\s+(\S+)$/i);
+  if (match) {
+    return termOptSize(match[1], match[2]);
+  }
+
+  if (/^termopt$/i.test(command)) {
+    return { ok: false, message: 'Usage: termopt <reset|pos x y|size x y>' };
   }
 
   if (/^help$/i.test(command)) {
