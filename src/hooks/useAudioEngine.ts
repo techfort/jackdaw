@@ -87,29 +87,50 @@ export const useAudioEngine = () => {
     });
   };
 
+  const expectedTimeRef = useRef(0);
+  const animationFrameRef = useRef<number>();
+
+  const runFrom = (from: number) => {
+    startPlayback(from);
+    expectedTimeRef.current = from;
+
+    const wallStart = Date.now() / 1000 - from;
+
+    const tick = () => {
+      const newTime = Date.now() / 1000 - wallStart;
+      expectedTimeRef.current = newTime;
+      setCurrentTime(newTime);
+      animationFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(tick);
+  };
+
   useEffect(() => {
     if (isPlaying) {
-      startPlayback(currentTime);
-
-      const startTime = Date.now() / 1000 - currentTime;
-      let animationFrame: number;
-
-      const tick = () => {
-        const newTime = Date.now() / 1000 - startTime;
-        setCurrentTime(newTime);
-        animationFrame = requestAnimationFrame(tick);
-      };
-
-      animationFrame = requestAnimationFrame(tick);
+      runFrom(currentTime);
 
       return () => {
-        cancelAnimationFrame(animationFrame);
+        if (animationFrameRef.current !== undefined) cancelAnimationFrame(animationFrameRef.current);
         stopAll();
       };
     } else {
       stopAll();
     }
   }, [isPlaying]);
+
+  // Restart playback from the new position when the playhead is moved externally
+  // (e.g. clicking the ruler) while playing. Ticks from our own RAF loop update
+  // currentTime every frame too, so only react when the value diverges from what
+  // the loop itself last wrote — that's the signature of an external seek.
+  useEffect(() => {
+    if (!isPlaying) return;
+    if (Math.abs(currentTime - expectedTimeRef.current) < 0.05) return;
+
+    if (animationFrameRef.current !== undefined) cancelAnimationFrame(animationFrameRef.current);
+    runFrom(currentTime);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTime, isPlaying]);
 
   // Handle Mute/Solo/Volume updates in real-time
   useEffect(() => {
