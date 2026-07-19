@@ -185,7 +185,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
       onClick={() => selectTrackByReference(track.id)}
     >
       {/* Controls - Sticky Left */}
-      <div className={`w-64 border-r border-[var(--color-border-main)] p-4 flex flex-col justify-between shrink-0 z-20 track-controls sticky left-0 shadow-2xl transition-colors duration-200 ${isSelected ? 'bg-[var(--color-bg-sidebar)]' : 'bg-[var(--color-bg-sidebar)] opacity-80'} ${track.isFrozen ? 'border-l-2 border-l-sky-500/60' : ''}`}>
+      <div className={`w-64 border-r border-[var(--color-border-main)] p-4 flex flex-col justify-between shrink-0 z-40 track-controls sticky left-0 shadow-2xl transition-colors duration-200 ${isSelected ? 'bg-[var(--color-bg-sidebar)]' : 'bg-[var(--color-bg-sidebar)] opacity-80'} ${track.isFrozen ? 'border-l-2 border-l-sky-500/60' : ''}`}>
         {isSelected && <div className="absolute inset-y-0 left-0 w-1 bg-[var(--color-accent)] z-30" />}
         <div className="flex items-start justify-between gap-1 overflow-hidden">
           <div className="flex flex-col overflow-hidden">
