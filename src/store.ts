@@ -702,6 +702,21 @@ export const useStore = create<DAWState>((set, get) => {
       get().pushUpdate().catch(err => console.error('Update failed', err));
     },
 
+    moveTrack: (trackId, targetTrackId) => {
+      if (trackId === targetTrackId) return;
+      pushToHistory();
+      set((state) => {
+        const fromIndex = state.tracks.findIndex(t => t.id === trackId);
+        const toIndex = state.tracks.findIndex(t => t.id === targetTrackId);
+        if (fromIndex === -1 || toIndex === -1) return { tracks: state.tracks };
+        const tracks = [...state.tracks];
+        const [moved] = tracks.splice(fromIndex, 1);
+        tracks.splice(toIndex, 0, moved);
+        return { tracks, canUndo: true };
+      });
+      get().pushUpdate().catch(err => console.error('Update failed', err));
+    },
+
     updateTrack: (id, updates, silent = false) => {
       const { currentUser, currentUserRole } = get();
       const track = get().tracks.find(t => t.id === id);

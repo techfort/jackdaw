@@ -192,6 +192,7 @@ export interface DAWState {
   addTrack: (buffer: AudioBuffer, name: string, audioData?: ArrayBuffer, offset?: number) => void;
   splitTrack: (trackId: string, timestamp: number) => void;
   removeTrack: (id: string) => void;
+  moveTrack: (trackId: string, targetTrackId: string) => void;
   updateTrack: (id: string, updates: Partial<TrackData>, silent?: boolean) => void;
   updateClip: (trackId: string, clipId: string, updates: Partial<Clip>, silent?: boolean) => void;
   removeClip: (trackId: string, clipId: string) => void;

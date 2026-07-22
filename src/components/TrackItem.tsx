@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  GripVertical,
 } from 'lucide-react';
 import { useStore } from '../store';
 import { TrackData } from '../types';
@@ -54,7 +55,10 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const saveTake = useStore(state => state.saveTake);
   const restoreTake = useStore(state => state.restoreTake);
   const deleteTake = useStore(state => state.deleteTake);
+  const moveTrack = useStore(state => state.moveTrack);
   const [isExporting, setIsExporting] = React.useState(false);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [isDragOver, setIsDragOver] = React.useState(false);
 
   const [activeTakeIndex, setActiveTakeIndex] = React.useState<number | null>(null);
   const takes = track.takes || [];
@@ -159,6 +163,36 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
   const canManageFreeze = currentUser?.id === track.ownerId || currentUserRole === 'owner';
   const canEdit = !track.isFrozen || canManageFreeze;
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('text/plain', track.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  const handleRowDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('text/plain')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setIsDragOver(true);
+  };
+
+  const handleRowDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleRowDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const draggedId = e.dataTransfer.getData('text/plain');
+    if (draggedId && draggedId !== track.id) {
+      moveTrack(draggedId, track.id);
+    }
+  };
+
   const handleInteraction = (e: React.MouseEvent) => {
     setSelectedTrackId(track.id);
     if (!waveformContainerRef.current) return;
@@ -180,15 +214,32 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
     <div
       role="region"
       aria-label={`Track: ${track.name}`}
-      className={`flex h-32 border-b border-[var(--color-border-main)] group relative w-full ${commentDraft?.trackId === track.id ? 'z-50' : ''} ${isSelected ? 'bg-[var(--color-accent)]/[0.08]' : 'bg-transparent'}`}
+      className={`flex h-32 border-b border-[var(--color-border-main)] group relative w-full ${commentDraft?.trackId === track.id ? 'z-50' : ''} ${isSelected ? 'bg-[var(--color-accent)]/[0.08]' : 'bg-transparent'} ${isDragging ? 'opacity-40' : ''} ${isDragOver ? 'ring-2 ring-inset ring-[var(--color-accent)]' : ''}`}
       id={`track-${track.id}`}
       onClick={() => selectTrackByReference(track.id)}
+      onDragOver={handleRowDragOver}
+      onDragLeave={handleRowDragLeave}
+      onDrop={handleRowDrop}
     >
       {/* Controls - Sticky Left */}
       <div className={`w-64 border-r border-[var(--color-border-main)] p-4 flex flex-col justify-between shrink-0 z-40 track-controls sticky left-0 shadow-2xl transition-colors duration-200 ${isSelected ? 'bg-[var(--color-bg-sidebar)]' : 'bg-[var(--color-bg-sidebar)] opacity-80'} ${track.isFrozen ? 'border-l-2 border-l-sky-500/60' : ''}`}>
         {isSelected && <div className="absolute inset-y-0 left-0 w-1 bg-[var(--color-accent)] z-30" />}
         <div className="flex items-start justify-between gap-1 overflow-hidden">
-          <div className="flex flex-col overflow-hidden">
+          <div className="flex items-center gap-1.5 overflow-hidden">
+            {canEdit && (
+              <span
+                draggable
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Drag to reorder ${track.name}`}
+                title="Drag to reorder track"
+                className="cursor-grab active:cursor-grabbing text-[var(--color-text-dark)] hover:text-[var(--color-text-muted)] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <GripVertical size={12} />
+              </span>
+            )}
+            <div className="flex flex-col overflow-hidden">
             <div className="flex items-center gap-1">
               {track.isFrozen && <Lock size={10} className="text-sky-400 shrink-0" />}
               {isEditingName ? (
@@ -213,6 +264,7 @@ export const TrackItem = React.memo<TrackItemProps>(({ track }) => {
               )}
             </div>
             <span className="text-[10px] text-[var(--color-text-dark)] font-mono tracking-tight uppercase">Stem {track.id.slice(0, 4)}</span>
+            </div>
           </div>
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             {canManageFreeze && (
