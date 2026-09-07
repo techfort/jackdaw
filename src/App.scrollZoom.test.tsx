@@ -36,12 +36,12 @@ describe('scroll zoom — wheel event handler', () => {
 
       if (e.ctrlKey || (e as any).metaKey) {
         e.preventDefault();
-        vp.scrollLeft += e.deltaY;
-      } else {
-        e.preventDefault();
         const delta = -e.deltaY;
         const zoomFactor = delta > 0 ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
         setZoomSpy(currentZoom * zoomFactor);
+      } else if (e.shiftKey) {
+        e.preventDefault();
+        vp.scrollLeft += e.deltaY;
       }
     };
 
@@ -55,36 +55,47 @@ describe('scroll zoom — wheel event handler', () => {
     document.body.removeChild(outside);
   });
 
-  it('zooms in when scrolling up on the viewport', () => {
-    const event = new WheelEvent('wheel', { deltaY: -100, bubbles: true });
+  it('allows native vertical scrolling when scrolling on the viewport', () => {
+    const event = new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true });
+    viewport.dispatchEvent(event);
+    expect(setZoomSpy).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('zooms in when ctrl+scrolling up on the viewport', () => {
+    const event = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true });
     viewport.dispatchEvent(event);
     expect(setZoomSpy).toHaveBeenCalledOnce();
     expect(setZoomSpy).toHaveBeenCalledWith(100 * ZOOM_IN_FACTOR);
+    expect(event.defaultPrevented).toBe(true);
   });
 
-  it('zooms out when scrolling down on the viewport', () => {
-    const event = new WheelEvent('wheel', { deltaY: 100, bubbles: true });
+  it('zooms out when ctrl+scrolling down on the viewport', () => {
+    const event = new WheelEvent('wheel', { deltaY: 100, ctrlKey: true, bubbles: true, cancelable: true });
     viewport.dispatchEvent(event);
     expect(setZoomSpy).toHaveBeenCalledOnce();
     expect(setZoomSpy).toHaveBeenCalledWith(100 * ZOOM_OUT_FACTOR);
+    expect(event.defaultPrevented).toBe(true);
   });
 
   it('does not zoom when scrolling on an element outside the viewport', () => {
-    const event = new WheelEvent('wheel', { deltaY: -100, bubbles: true });
+    const event = new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true });
     outside.dispatchEvent(event);
     expect(setZoomSpy).not.toHaveBeenCalled();
   });
 
-  it('does not zoom when ctrl+scroll on the viewport (horizontal scroll mode)', () => {
-    const event = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, bubbles: true });
+  it('scrolls horizontally when shift+scrolling on the viewport', () => {
+    const event = new WheelEvent('wheel', { deltaY: 100, shiftKey: true, bubbles: true, cancelable: true });
     viewport.dispatchEvent(event);
     expect(setZoomSpy).not.toHaveBeenCalled();
+    expect(viewport.scrollLeft).toBe(100);
+    expect(event.defaultPrevented).toBe(true);
   });
 
-  it('handles zoom for events from child elements of the viewport', () => {
+  it('handles ctrl+scroll zoom for events from child elements of the viewport', () => {
     const child = document.createElement('div');
     viewport.appendChild(child);
-    const event = new WheelEvent('wheel', { deltaY: -100, bubbles: true });
+    const event = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true });
     child.dispatchEvent(event);
     expect(setZoomSpy).toHaveBeenCalledOnce();
     viewport.removeChild(child);
@@ -104,6 +115,8 @@ describe('scroll zoom — wheel event handler', () => {
     const handleWheel = (e: WheelEvent) => {
       const vp = lateRef.current;
       if (!vp || !vp.contains(e.target as Node)) return;
+      if (!e.ctrlKey && !(e as any).metaKey) return;
+      e.preventDefault();
       const delta = -e.deltaY;
       const zoomFactor = delta > 0 ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
       setZoomSpy(currentZoom * zoomFactor);
@@ -115,7 +128,7 @@ describe('scroll zoom — wheel event handler', () => {
     document.body.appendChild(lateViewport);
     lateRef.current = lateViewport;
 
-    const event = new WheelEvent('wheel', { deltaY: -100, bubbles: true });
+    const event = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true });
     lateViewport.dispatchEvent(event);
     expect(setZoomSpy).toHaveBeenCalledOnce();
 

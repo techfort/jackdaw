@@ -318,16 +318,16 @@ export default function App() {
       if (!viewport || !viewport.contains(e.target as Node)) return;
 
       if (e.ctrlKey || e.metaKey) {
-        // Horizontal Move with Ctrl+Scrolling
-        e.preventDefault();
-        viewport.scrollLeft += e.deltaY;
-      } else {
-        // Zoom with Scrolling
+        // Zoom with Ctrl/Cmd+Scrolling
         e.preventDefault();
         const delta = -e.deltaY;
         const zoomFactor = delta > 0 ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
         const currentZoom = Number(useStore.getState().zoom) || 100;
         useStore.getState().setZoom(currentZoom * zoomFactor);
+      } else if (e.shiftKey) {
+        // Horizontal Move with Shift+Scrolling
+        e.preventDefault();
+        viewport.scrollLeft += e.deltaY;
       }
     };
 
